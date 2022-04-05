@@ -7,10 +7,8 @@ import schedule
 import gitlab
 from threading import Thread
 
-# TOKEN = os.getenv('BOT_TOKEN')
-# G_TOKEN = os.getenv('GITLAB_PAT')
-TOKEN = '5278622840:AAEYBhEvh4gVm3OHsq5yBgYDLigYk0gSU2w'
-G_TOKEN = 'glpat-Rzz8XH_bPLzTLhbW8X8Q'
+TOKEN = os.getenv('BOT_TOKEN')
+G_TOKEN = os.getenv('GITLAB_PAT')
 CHANNEL_ID = '@letovo_quotes'
 MOD_ID = -1001791070494
 BAN_TIME = 3600
