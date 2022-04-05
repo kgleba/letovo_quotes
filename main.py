@@ -7,8 +7,10 @@ import schedule
 import gitlab
 from threading import Thread
 
-TOKEN = os.getenv('BOT_TOKEN')
-G_TOKEN = os.getenv('GITLAB_PAT')
+# TOKEN = os.getenv('BOT_TOKEN')
+# G_TOKEN = os.getenv('GITLAB_PAT')
+TOKEN = '5278622840:AAEYBhEvh4gVm3OHsq5yBgYDLigYk0gSU2w'
+G_TOKEN = 'glpat-Rzz8XH_bPLzTLhbW8X8Q'
 CHANNEL_ID = '@letovo_quotes'
 MOD_ID = -1001791070494
 BAN_TIME = 3600
@@ -216,6 +218,27 @@ def get_queue(message):
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
 
+@bot.message_handler(commands=['get_banlist'])
+def get_banlist(message):
+    if message.chat.id == MOD_ID:
+        _banlist = open('banlist.txt', 'r')
+        i = 0
+        m = _banlist.readlines()
+        a = []
+        for _ in range(len(m)):
+            x = m[i].strip().split(':')
+            a.append(x[0] + ': ' + time.strftime("%H:%M:%S", time.gmtime(int(x[1].strip()))) + ' -> ' + time.strftime("%H:%M:%S", time.gmtime(int(x[1]) + BAN_TIME)) + '\n')
+            i += 1
+        if i == 0:
+            bot.send_message(MOD_ID, 'Список заблокированных пользователей пуст!')
+        else:
+            bot.send_message(MOD_ID, 'ID пользователя: время блокировки -> время разблокировки')
+            bot.send_message(MOD_ID, ''.join(a))
+        banlist.close()
+    else:
+        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+
+
 @bot.message_handler(commands=['del_queue'])
 def del_queue(message):
     if message.chat.id == MOD_ID:
@@ -248,10 +271,12 @@ def del_queue(message):
 @bot.message_handler(commands=['clear_queue'])
 def clear_queue(message):
     if message.chat.id == MOD_ID:
-        queue = open('queue.txt', 'w')
-        bot.send_message(MOD_ID, 'Успешно очистил очередь публикаций!')
-        queue.close()
-        push_gitlab('queue.txt')
+        keyboard = telebot.types.InlineKeyboardMarkup()
+        keyboard.add(
+            telebot.types.InlineKeyboardButton(text='➕ Да', callback_data=f'clear: yes'))
+        keyboard.add(
+            telebot.types.InlineKeyboardButton(text='➖ Нет', callback_data=f'clear: no'))
+        bot.send_message(MOD_ID, 'Вы уверены в том, что хотите очистить очередь публикаций?', reply_markup=keyboard)
     else:
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
@@ -269,6 +294,15 @@ def button_handler(call):
                               call.message.id, reply_markup=None)
     elif call.data == 'reject':
         bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
+                              call.message.id, reply_markup=None)
+    elif call.data == 'clear: yes':
+        queue = open('queue.txt', 'w')
+        bot.edit_message_text('Успешно очистил очередь публикаций!', MOD_ID,
+                              call.message.id, reply_markup=None)
+        queue.close()
+        push_gitlab('queue.txt')
+    elif call.data == 'clear: no':
+        bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID,
                               call.message.id, reply_markup=None)
     bot.answer_callback_query(call.id)
 
