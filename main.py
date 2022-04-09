@@ -97,7 +97,7 @@ def suggest(message):
     global sent_quotes, call_cnt
     quote = message.text[9:]
     author = message.from_user.username
-    author_id = message.from_user.id
+    author_id = str(message.from_user.id)
     if author is None:
         author = message.from_user.first_name + ' ' + message.from_user.last_name
     if quote:
@@ -106,7 +106,7 @@ def suggest(message):
                 banlist = dict(json.load(file))
         except json.decoder.JSONDecodeError:
             banlist = dict()
-        if str(author_id) not in banlist.keys() or int(time.time()) > banlist[str(author_id)] + BAN_TIME:
+        if author_id not in banlist.keys() or int(time.time()) > banlist[author_id] + BAN_TIME:
             if author_id in banlist.keys():
                 banlist.pop(author_id)
 
@@ -126,7 +126,7 @@ def suggest(message):
                              reply_markup=keyboard)
         else:
             bot.send_message(message.chat.id,
-                             f'Вы были заблокированы, поэтому не можете предлагать цитаты. Оставшееся время блокировки: {format_time(BAN_TIME - int(time.time()) + banlist[author_id])}')
+                             f'Вы были заблокированы, поэтому не можете предлагать цитаты. Оставшееся время блокировки: {format_time(BAN_TIME - int(time.time()) + banlist[str(author_id)])}')
     else:
         bot.send_message(message.chat.id,
                          'Эта команда используется для отправки цитат в предложку. Все, что тебе нужно сделать - ввести текст после команды /suggest и ждать публикации. '
