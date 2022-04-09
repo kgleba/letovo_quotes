@@ -106,7 +106,7 @@ def suggest(message):
                 banlist = dict(json.load(file))
         except json.decoder.JSONDecodeError:
             banlist = dict()
-        if str(author_id) not in banlist.keys() or int(time.time()) > banlist[author_id] + BAN_TIME:
+        if str(author_id) not in banlist.keys() or int(time.time()) > banlist[str(author_id)] + BAN_TIME:
             if author_id in banlist.keys():
                 banlist.pop(author_id)
 
