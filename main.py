@@ -40,8 +40,8 @@ def format_time(value):
 
 
 def push_gitlab(filename):
-    f = open(filename, 'r', encoding='utf-8')
-    data = f.read()
+    file = open(filename, 'r', encoding='utf-8')
+    data = file.read()
     action = 'create'
     for i in project.repository_tree():
         if i['name'] == filename:
@@ -59,15 +59,25 @@ def push_gitlab(filename):
         ]
     }
     project.commits.create(payload)
-    f.close()
+    file.close()
+
+
+def open_json(filename):
+    try:
+        with open(filename, 'r', encoding='utf-8') as file:
+            data = dict(json.load(file))
+    except json.decoder.JSONDecodeError:
+        data = dict()
+    return data
+
+
+def save_json(data, filename):
+    with open(filename, 'w', encoding='utf-8') as file:
+        json.dump(data, file, ensure_ascii=False)
 
 
 def publish_quote():
-    try:
-        with open('queue.json', 'r', encoding='utf-8') as file:
-            queue = dict(json.load(file))
-    except json.decoder.JSONDecodeError:
-        queue = dict()
+    queue = open_json('queue.json')
 
     if queue == dict():
         bot.send_message(MOD_ID, text='Цитаты в очереди закончились! :(')
@@ -79,9 +89,7 @@ def publish_quote():
         queue[str(key)] = queue[str(int(key) + 1)]
     queue.pop(str(len(queue.keys()) - 1))
 
-    with open('queue.json', 'w', encoding='utf-8') as file:
-        json.dump(queue, file, ensure_ascii=False)
-
+    save_json(queue, 'queue.json')
     push_gitlab('queue.json')
 
 
@@ -101,19 +109,12 @@ def suggest(message):
     if author is None:
         author = message.from_user.first_name + ' ' + message.from_user.last_name
     if quote:
-        try:
-            with open('banlist.json', 'r', encoding='utf-8') as file:
-                banlist = dict(json.load(file))
-        except json.decoder.JSONDecodeError:
-            banlist = dict()
-        if author_id not in banlist.keys() or int(time.time()) > banlist[author_id] + BAN_TIME:
-            if author_id in banlist.keys():
-                banlist.pop(author_id)
-
-            with open('banlist.json', 'w', encoding='utf-8') as file:
-                json.dump(banlist, file, ensure_ascii=False)
-
+        banlist = open_json('banlist.json')
+        if int(time.time()) > banlist[author_id] + BAN_TIME:
+            banlist.pop(author_id)
+            save_json(banlist, 'banlist.json')
             push_gitlab('banlist.json')
+        if author_id not in banlist.keys():
             bot.send_message(message.chat.id, 'Принято! Отправил твою цитату в предложку :)')
             keyboard = telebot.types.InlineKeyboardMarkup()
             keyboard.add(
@@ -126,7 +127,7 @@ def suggest(message):
                              reply_markup=keyboard)
         else:
             bot.send_message(message.chat.id,
-                             f'Вы были заблокированы, поэтому не можете предлагать цитаты. Оставшееся время блокировки: {format_time(BAN_TIME - int(time.time()) + banlist[str(author_id)])}')
+                             f'Вы были заблокированы, поэтому не можете предлагать цитаты. Оставшееся время блокировки: {format_time(BAN_TIME - int(time.time()) + banlist[author_id])}')
     else:
         bot.send_message(message.chat.id,
                          'Эта команда используется для отправки цитат в предложку. Все, что тебе нужно сделать - ввести текст после команды /suggest и ждать публикации. '
@@ -137,25 +138,19 @@ def suggest(message):
 def ban(message):
     if message.chat.id == MOD_ID:
         try:
-            message = int(message.text[4:])
+            user_id = int(message.text[4:])
         except ValueError:
             bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
             return
 
-        try:
-            with open('banlist.json', 'r', encoding='utf-8') as file:
-                banlist = dict(json.load(file))
-        except json.decoder.JSONDecodeError:
-            banlist = dict()
+        banlist = open_json('banlist.json')
 
-        message = str(message).replace(' ', '')
-        banlist.update({message: int(time.time())})
+        user_id = str(user_id).replace(' ', '')
+        banlist.update({user_id: int(time.time())})
 
-        with open('banlist.json', 'w', encoding='utf-8') as file:
-            json.dump(banlist, file, ensure_ascii=False)
-
+        save_json(banlist, 'banlist.json')
         push_gitlab('banlist.json')
-        bot.send_message(MOD_ID, f'Пользователь {message} успешно заблокирован!')
+        bot.send_message(MOD_ID, f'Пользователь {user_id} успешно заблокирован!')
     else:
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
@@ -164,28 +159,22 @@ def ban(message):
 def unban(message):
     if message.chat.id == MOD_ID:
         try:
-            message = int(message.text[6:])
+            user_id = int(message.text[6:])
         except ValueError:
             bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
             return
 
-        try:
-            with open('banlist.json', 'r', encoding='utf-8') as file:
-                banlist = dict(json.load(file))
-        except json.decoder.JSONDecodeError:
-            banlist = dict()
+        banlist = open_json('banlist.json')
 
-        message = str(message).replace(' ', '')
-        if message not in banlist.keys():
-            bot.send_message(MOD_ID, f'Пользователь {message} не заблокирован!')
+        user_id = str(user_id).replace(' ', '')
+        if user_id not in banlist.keys():
+            bot.send_message(MOD_ID, f'Пользователь {user_id} не заблокирован!')
         else:
-            banlist.pop(message)
+            banlist.pop(user_id)
 
-        with open('banlist.json', 'w', encoding='utf-8') as file:
-            json.dump(banlist, file, ensure_ascii=False)
-
+        save_json(banlist, 'banlist.json')
         push_gitlab('banlist.json')
-        bot.send_message(MOD_ID, f'Пользователь {message} успешно разблокирован!')
+        bot.send_message(MOD_ID, f'Пользователь {user_id} успешно разблокирован!')
     else:
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
@@ -196,18 +185,13 @@ def add_queue(message):
         if len(message.text) == 6:
             bot.send_message(message.chat.id, 'Эта команда должна содержать какой-то параметр!')
             return
-        try:
-            with open('queue.json', 'r', encoding='utf-8') as file:
-                quotes = json.load(file)
-        except json.decoder.JSONDecodeError:
-            quotes = dict()
-        next_num = len(quotes.keys())
-        message = message.text[7:]
-        quotes.update({str(next_num): message})
+        queue = open_json('queue.json')
 
-        with open('queue.json', 'w', encoding='utf-8') as file:
-            json.dump(quotes, file, ensure_ascii=False)
+        next_num = len(queue.keys())
+        quote = message.text[7:]
+        queue.update({str(next_num): quote})
 
+        save_json(queue, 'queue.json')
         push_gitlab('queue.json')
         bot.send_message(MOD_ID, 'Успешно занес цитату в очередь публикации!')
     else:
@@ -217,11 +201,7 @@ def add_queue(message):
 @bot.message_handler(commands=['get_queue'])
 def get_queue(message):
     if message.chat.id == MOD_ID:
-        try:
-            with open('queue.json', 'r', encoding='utf-8') as file:
-                queue = dict(json.load(file))
-        except json.decoder.JSONDecodeError:
-            queue = dict()
+        queue = open_json('queue.json')
         for num, quote in queue.items():
             bot.send_message(MOD_ID, f'#*{num}*\n{quote}', parse_mode='Markdown')
         if queue == dict():
@@ -233,20 +213,14 @@ def get_queue(message):
 @bot.message_handler(commands=['get_banlist'])
 def get_banlist(message):
     if message.chat.id == MOD_ID:
-        try:
-            with open('banlist.json', 'r', encoding='utf-8') as file:
-                banlist = dict(json.load(file))
-        except json.decoder.JSONDecodeError:
-            banlist = dict()
+        banlist = open_json('banlist.json')
 
-        a = []
-        for key, value in banlist.items():
-            a.append(key + ': ' + format_time(int(value)) + ' -> ' + format_time(int(value) + BAN_TIME) + '\n')
-        if not banlist.keys():
+        if banlist == dict():
             bot.send_message(MOD_ID, 'Список заблокированных пользователей пуст!')
-        else:
-            bot.send_message(MOD_ID, 'ID пользователя: время блокировки -> время разблокировки')
-            bot.send_message(MOD_ID, ''.join(a))
+            return
+        bot.send_message(MOD_ID, 'ID пользователя: время блокировки -> время разблокировки')
+        for key, value in banlist.items():
+            bot.send_message(MOD_ID, key + ': ' + format_time(int(value)) + ' -> ' + format_time(int(value) + BAN_TIME))
     else:
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
@@ -258,27 +232,18 @@ def del_queue(message):
             bot.send_message(message.chat.id, 'Эта команда должна содержать какой-то параметр!')
             return
 
-        try:
-            num = int(message.text[10:])
-        except ValueError:
+        queue = open_json('queue.json')
+
+        num = message.text[10:]
+        if num not in queue.keys():
             bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
             return
-
-        num = str(num)
-
-        try:
-            with open('queue.json', 'r', encoding='utf-8') as file:
-                queue = dict(json.load(file))
-        except json.decoder.JSONDecodeError:
-            queue = dict()
 
         for key in range(int(num), len(queue.keys()) - 1):
             queue[str(key)] = queue[str(int(key) + 1)]
         queue.pop(str(len(queue.keys()) - 1))
 
-        with open('queue.json', 'w', encoding='utf-8') as file:
-            json.dump(queue, file, ensure_ascii=False)
-
+        save_json(queue, 'queue.json')
         push_gitlab('queue.json')
 
         bot.send_message(MOD_ID, f'Успешно удалил цитату с номером {num}!')
@@ -302,19 +267,13 @@ def clear_queue(message):
 @bot.callback_query_handler(func=lambda call: True)
 def button_handler(call):
     if not re.match(r'publish', call.data) is None:
-        try:
-            with open('queue.json', 'r', encoding='utf-8') as file:
-                quotes = json.load(file)
-        except json.decoder.JSONDecodeError:
-            quotes = dict()
+        queue = open_json('queue.json')
 
-        message = sent_quotes[int(call.data[9:])]
-        next_num = len(quotes.keys()) + 1
-        quotes.update({str(next_num): message})
+        quote = sent_quotes[int(call.data[9:])]
+        next_num = len(queue.keys())
+        queue.update({str(next_num): quote})
 
-        with open('queue.json', 'w', encoding='utf-8') as file:
-            json.dump(quotes, file, ensure_ascii=False)
-
+        save_json(queue, 'queue.json')
         push_gitlab('queue.json')
 
         bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID,
@@ -323,9 +282,7 @@ def button_handler(call):
         bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
                               call.message.id, reply_markup=None)
     elif call.data == 'clear: yes':
-        queue = dict()
-        with open('queue.json', 'w', encoding='utf-8') as file:
-            json.dump(queue, file, ensure_ascii=False)
+        save_json(dict(), 'queue.json')
 
         bot.edit_message_text('Успешно очистил очередь публикаций!', MOD_ID,
                               call.message.id, reply_markup=None)
