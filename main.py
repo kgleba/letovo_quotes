@@ -234,7 +234,7 @@ def del_queue(message):
 
         queue = open_json('queue.json')
 
-        num = message.text[10:]
+        num = message.text[10:].replace(' ', '')
         if num not in queue.keys():
             bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
             return
