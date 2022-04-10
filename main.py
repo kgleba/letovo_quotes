@@ -110,7 +110,7 @@ def suggest(message):
         author = message.from_user.first_name + ' ' + message.from_user.last_name
     if quote:
         banlist = open_json('banlist.json')
-        if int(time.time()) > banlist[author_id] + BAN_TIME:
+        if author_id in banlist.keys() or int(time.time()) > banlist[author_id] + BAN_TIME:
             banlist.pop(author_id)
             save_json(banlist, 'banlist.json')
             push_gitlab('banlist.json')
