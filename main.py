@@ -18,7 +18,7 @@ bot = telebot.TeleBot(TOKEN)
 gl = gitlab.Gitlab('https://gitlab.com', private_token=G_TOKEN)
 project = gl.projects.get(35046550)
 sent_quotes = {}
-call_cnt = 0
+call_count = 0
 
 _banlist = open('banlist.json', 'wb')
 try:
@@ -102,7 +102,7 @@ def hello(message):
 
 @bot.message_handler(commands=['suggest'])
 def suggest(message):
-    global sent_quotes, call_cnt
+    global sent_quotes, call_count
     quote = message.text[9:]
     author = message.from_user.username
     author_id = str(message.from_user.id)
@@ -118,9 +118,9 @@ def suggest(message):
             bot.send_message(message.chat.id, 'Принято! Отправил твою цитату в предложку :)')
             keyboard = telebot.types.InlineKeyboardMarkup()
             keyboard.add(
-                telebot.types.InlineKeyboardButton(text='🔔 Опубликовать', callback_data=f'publish: {call_cnt}'))
-            sent_quotes.update({call_cnt: quote})
-            call_cnt += 1
+                telebot.types.InlineKeyboardButton(text='🔔 Опубликовать', callback_data=f'publish: {call_count}'))
+            sent_quotes.update({call_count: quote})
+            call_count += 1
             keyboard.add(telebot.types.InlineKeyboardButton(text='🚫 Отменить', callback_data='reject'))
             bot.send_message(MOD_ID,
                              f'Пользователь @{author} [ID: {author_id}] предложил следующую цитату:\n\n{quote}',
@@ -137,15 +137,13 @@ def suggest(message):
 @bot.message_handler(commands=['ban'])
 def ban(message):
     if message.chat.id == MOD_ID:
-        try:
-            user_id = int(message.text[4:])
-        except ValueError:
+        user_id = message.text[4:].replace(' ', '')
+        if not user_id.isdigit():
             bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
             return
 
         banlist = open_json('banlist.json')
 
-        user_id = str(user_id).replace(' ', '')
         banlist.update({user_id: int(time.time())})
 
         save_json(banlist, 'banlist.json')
@@ -158,15 +156,13 @@ def ban(message):
 @bot.message_handler(commands=['unban'])
 def unban(message):
     if message.chat.id == MOD_ID:
-        try:
-            user_id = int(message.text[6:])
-        except ValueError:
+        user_id = message.text[6:].replace(' ', '')
+        if not user_id.isdigit():
             bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
             return
 
         banlist = open_json('banlist.json')
 
-        user_id = str(user_id).replace(' ', '')
         if user_id not in banlist.keys():
             bot.send_message(MOD_ID, f'Пользователь {user_id} не заблокирован!')
         else:
@@ -187,9 +183,9 @@ def add_queue(message):
             return
         queue = open_json('queue.json')
 
-        next_num = len(queue.keys())
+        next_quote_id = len(queue.keys())
         quote = message.text[7:]
-        queue.update({str(next_num): quote})
+        queue.update({str(next_quote_id): quote})
 
         save_json(queue, 'queue.json')
         push_gitlab('queue.json')
@@ -202,8 +198,8 @@ def add_queue(message):
 def get_queue(message):
     if message.chat.id == MOD_ID:
         queue = open_json('queue.json')
-        for num, quote in queue.items():
-            bot.send_message(MOD_ID, f'#*{num}*\n{quote}', parse_mode='Markdown')
+        for quote_id, quote in queue.items():
+            bot.send_message(MOD_ID, f'#*{quote_id}*\n{quote}', parse_mode='Markdown')
         if queue == dict():
             bot.send_message(MOD_ID, 'Очередь публикации пуста!')
     else:
@@ -234,19 +230,19 @@ def del_queue(message):
 
         queue = open_json('queue.json')
 
-        num = message.text[10:].replace(' ', '')
-        if num not in queue.keys():
+        quote_id = message.text[10:].replace(' ', '')
+        if quote_id not in queue.keys():
             bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
             return
 
-        for key in range(int(num), len(queue.keys()) - 1):
+        for key in range(int(quote_id), len(queue.keys()) - 1):
             queue[str(key)] = queue[str(int(key) + 1)]
         queue.pop(str(len(queue.keys()) - 1))
 
         save_json(queue, 'queue.json')
         push_gitlab('queue.json')
 
-        bot.send_message(MOD_ID, f'Успешно удалил цитату с номером {num}!')
+        bot.send_message(MOD_ID, f'Успешно удалил цитату с номером {quote_id}!')
     else:
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
@@ -270,8 +266,8 @@ def button_handler(call):
         queue = open_json('queue.json')
 
         quote = sent_quotes[int(call.data[9:])]
-        next_num = len(queue.keys())
-        queue.update({str(next_num): quote})
+        next_quote_id = len(queue.keys())
+        queue.update({str(next_quote_id): quote})
 
         save_json(queue, 'queue.json')
         push_gitlab('queue.json')
