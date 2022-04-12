@@ -1,23 +1,17 @@
-# -*- coding: utf-8 -*-
-import os
 import time
-import re
-import json
-import telebot
-import schedule
-import gitlab
 from threading import Thread
+import schedule
+import telebot
+from backend import *
 
 TOKEN = os.getenv('BOT_TOKEN')
-G_TOKEN = os.getenv('GITLAB_PAT')
 CHANNEL_ID = '@letovo_quotes'
 MOD_ID = -1001791070494
 BAN_TIME = 3600
 
 bot = telebot.TeleBot(TOKEN)
-gl = gitlab.Gitlab('https://gitlab.com', private_token=G_TOKEN)
-project = gl.projects.get(35046550)
-sent_quotes = {}
+pending = {}
+pinned_pending = {}
 call_count = 0
 
 _banlist = open('banlist.json', 'wb')
@@ -37,43 +31,6 @@ _queue.close()
 
 def format_time(value):
     return time.strftime("%H:%M:%S", time.gmtime(value))
-
-
-def push_gitlab(filename):
-    file = open(filename, 'r', encoding='utf-8')
-    data = file.read()
-    action = 'create'
-    for i in project.repository_tree():
-        if i['name'] == filename:
-            action = 'update'
-            break
-    payload = {
-        'branch': 'main',
-        'commit_message': 'Update',
-        'actions': [
-            {
-                'action': action,
-                'file_path': filename,
-                'content': data,
-            }
-        ]
-    }
-    project.commits.create(payload)
-    file.close()
-
-
-def open_json(filename):
-    try:
-        with open(filename, 'r', encoding='utf-8') as file:
-            data = dict(json.load(file))
-    except json.decoder.JSONDecodeError:
-        data = dict()
-    return data
-
-
-def save_json(data, filename):
-    with open(filename, 'w', encoding='utf-8') as file:
-        json.dump(data, file, ensure_ascii=False)
 
 
 def publish_quote():
@@ -102,15 +59,21 @@ def hello(message):
 
 @bot.message_handler(commands=['suggest'])
 def suggest(message):
-    global sent_quotes, call_count
-    quote = message.text[9:]
+    global pending, call_count
+    quote = reformat_quote(message.text[9:])
     author = message.from_user.username
     author_id = str(message.from_user.id)
     if author is None:
         author = message.from_user.first_name + ' ' + message.from_user.last_name
     if quote:
+        for i in pending.values():
+            if check_similarity(i, quote) > 75:
+                bot.send_message(message.chat.id,
+                                 'Подобная цитата уже отправлена в предложку! Флудить не стоит, ожидай решения модерации :)')
+                return
+
         banlist = open_json('banlist.json')
-        if author_id in banlist.keys() and int(time.time()) > banlist[author_id] + BAN_TIME:
+        if author_id in banlist.keys() and int(time.time()) > banlist[author_id]:
             banlist.pop(author_id)
             save_json(banlist, 'banlist.json')
             push_gitlab('banlist.json')
@@ -119,12 +82,15 @@ def suggest(message):
             keyboard = telebot.types.InlineKeyboardMarkup()
             keyboard.add(
                 telebot.types.InlineKeyboardButton(text='🔔 Опубликовать', callback_data=f'publish: {call_count}'))
-            sent_quotes.update({call_count: quote})
+            pending.update({call_count: quote})
+
+            keyboard.add(telebot.types.InlineKeyboardButton(text='🚫 Отменить', callback_data=f'reject: {call_count}'))
+            sent_quote = bot.send_message(MOD_ID,
+                                          f'Пользователь @{author} [ID: {author_id}] предложил следующую цитату:\n\n{quote}',
+                                          reply_markup=keyboard)
+            bot.pin_chat_message(MOD_ID, sent_quote.message_id)
+            pinned_pending[call_count] = sent_quote
             call_count += 1
-            keyboard.add(telebot.types.InlineKeyboardButton(text='🚫 Отменить', callback_data='reject'))
-            bot.send_message(MOD_ID,
-                             f'Пользователь @{author} [ID: {author_id}] предложил следующую цитату:\n\n{quote}',
-                             reply_markup=keyboard)
         else:
             bot.send_message(message.chat.id,
                              f'Вы были заблокированы, поэтому не можете предлагать цитаты. Оставшееся время блокировки: {format_time(BAN_TIME - int(time.time()) + banlist[author_id])}')
@@ -137,14 +103,20 @@ def suggest(message):
 @bot.message_handler(commands=['ban'])
 def ban(message):
     if message.chat.id == MOD_ID:
-        user_id = message.text[4:].replace(' ', '')
+        args = message.text[5:].split(' ')
+        if len(args) == 2:
+            user_id, period = args
+        else:
+            user_id = args[0]
+            period = BAN_TIME
+
         if not user_id.isdigit():
             bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
             return
 
         banlist = open_json('banlist.json')
 
-        banlist.update({user_id: int(time.time())})
+        banlist.update({user_id: int(time.time()) + int(period)})
 
         save_json(banlist, 'banlist.json')
         push_gitlab('banlist.json')
@@ -214,9 +186,10 @@ def get_banlist(message):
         if banlist == dict():
             bot.send_message(MOD_ID, 'Список заблокированных пользователей пуст!')
             return
-        bot.send_message(MOD_ID, 'ID пользователя: время блокировки -> время разблокировки')
+
+        bot.send_message(MOD_ID, 'ID пользователя: время разблокировки')
         for key, value in banlist.items():
-            bot.send_message(MOD_ID, key + ': ' + format_time(int(value)) + ' -> ' + format_time(int(value) + BAN_TIME))
+            bot.send_message(MOD_ID, key + ': ' + format_time(int(value)))
     else:
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
@@ -260,12 +233,37 @@ def clear_queue(message):
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
 
+@bot.message_handler(commands=['edit_quote'])
+def edit_quote(message):
+    if message.chat.id == MOD_ID:
+        args = message.text[12:].split('; ')
+        if len(args) == 2:
+            quote_id, new_text = args
+            if not quote_id.isdigit():
+                bot.send_message(MOD_ID, 'Введи корректное значение идентификатора!')
+                return
+
+            queue = open_json('queue.json')
+            if quote_id in queue.keys():
+                queue[quote_id] = new_text
+            else:
+                bot.send_message(MOD_ID, 'Цитаты с таким номером не существует!')
+                return
+            save_json(queue, 'queue.json')
+            push_gitlab('queue.json')
+        else:
+            bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
+            return
+    else:
+        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+
+
 @bot.callback_query_handler(func=lambda call: True)
 def button_handler(call):
-    if not re.match(r'publish', call.data) is None:
+    if call.data[:7] == 'publish':
         queue = open_json('queue.json')
-
-        quote = sent_quotes[int(call.data[9:])]
+        call_cnt = int(call.data[9:])
+        quote = pending[call_cnt]
         next_quote_id = len(queue.keys())
         queue.update({str(next_quote_id): quote})
 
@@ -274,9 +272,12 @@ def button_handler(call):
 
         bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID,
                               call.message.id, reply_markup=None)
-    elif call.data == 'reject':
+        bot.unpin_chat_message(MOD_ID, pinned_pending[call_cnt].message_id)
+    elif call.data[:6] == 'reject':
+        call_cnt = int(call.data[8:])
         bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
                               call.message.id, reply_markup=None)
+        bot.unpin_chat_message(MOD_ID, pinned_pending[call_cnt].message_id)
     elif call.data == 'clear: yes':
         save_json(dict(), 'queue.json')
 
