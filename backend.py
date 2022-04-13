@@ -56,7 +56,7 @@ def reformat_quote(text):
         return text
     text = list(text.strip())
     symbol = text.index('#')
-    if text[symbol - 1] == '\n':
+    while text[symbol - 1] == '\n':
         text.pop(symbol - 1)
         symbol -= 1
     while symbol < len(text):
