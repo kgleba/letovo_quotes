@@ -93,7 +93,7 @@ def suggest(message):
             call_count += 1
         else:
             bot.send_message(message.chat.id,
-                             f'Вы были заблокированы, поэтому не можете предлагать цитаты. Оставшееся время блокировки: {format_time(BAN_TIME - int(time.time()) + banlist[author_id])}')
+                             f'Вы были заблокированы, поэтому не можете предлагать цитаты. Оставшееся время блокировки: {format_time(banlist[author_id] - int(time.time()))}')
     else:
         bot.send_message(message.chat.id,
                          'Эта команда используется для отправки цитат в предложку. Все, что тебе нужно сделать - ввести текст после команды /suggest и ждать публикации. '
@@ -260,6 +260,7 @@ def edit_quote(message):
 
 @bot.callback_query_handler(func=lambda call: True)
 def button_handler(call):
+    call_cnt = 0
     if call.data[:7] == 'publish':
         queue = open_json('queue.json')
         call_cnt = int(call.data[9:])
@@ -272,12 +273,10 @@ def button_handler(call):
 
         bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID,
                               call.message.id, reply_markup=None)
-        bot.unpin_chat_message(MOD_ID, pinned_pending[call_cnt].message_id)
     elif call.data[:6] == 'reject':
         call_cnt = int(call.data[8:])
         bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
                               call.message.id, reply_markup=None)
-        bot.unpin_chat_message(MOD_ID, pinned_pending[call_cnt].message_id)
     elif call.data == 'clear: yes':
         save_json(dict(), 'queue.json')
 
@@ -288,6 +287,10 @@ def button_handler(call):
         bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID,
                               call.message.id, reply_markup=None)
     bot.answer_callback_query(call.id)
+    try:
+        bot.unpin_chat_message(MOD_ID, pinned_pending[call_cnt].message_id)
+    except KeyError:
+        bot.send_message(MOD_ID, 'Не тыкай сюда, инвалид!')
 
 
 Thread(target=bot.polling, args=()).start()
