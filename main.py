@@ -303,7 +303,8 @@ def button_handler(call):
         bot.send_message(MOD_ID, 'Возникла проблема с обработкой цитаты :( Если это необходимо, проведи ее вручную.')
 
 
-Thread(target=bot.polling, args=()).start()
+if __name__ == "__main__":
+    Thread(target=bot.polling, args=()).start()
 schedule.every().day.at('09:00').do(publish_quote)
 schedule.every().day.at('15:00').do(publish_quote)
 
