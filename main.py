@@ -93,7 +93,7 @@ def suggest(message):
             call_count += 1
         else:
             bot.send_message(message.chat.id,
-                             f'Вы были заблокированы, поэтому не можете предлагать цитаты. Оставшееся время блокировки: {format_time(BAN_TIME - int(time.time()) + banlist[author_id])}')
+                             f'Вы были заблокированы, поэтому не можете предлагать цитаты. Оставшееся время блокировки: {format_time(banlist[author_id] - int(time.time()))}')
     else:
         bot.send_message(message.chat.id,
                          'Эта команда используется для отправки цитат в предложку. Все, что тебе нужно сделать - ввести текст после команды /suggest и ждать публикации. '
@@ -249,8 +249,10 @@ def edit_quote(message):
             else:
                 bot.send_message(MOD_ID, 'Цитаты с таким номером не существует!')
                 return
+            bot.send_message(MOD_ID, f'Успешно изменил цитату под номером {quote_id}!')
             save_json(queue, 'queue.json')
             push_gitlab('queue.json')
+
         else:
             bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
             return
@@ -260,10 +262,11 @@ def edit_quote(message):
 
 @bot.callback_query_handler(func=lambda call: True)
 def button_handler(call):
+    actual_quote_id = 0
     if call.data[:7] == 'publish':
         queue = open_json('queue.json')
-        call_cnt = int(call.data[9:])
-        quote = pending[call_cnt]
+        actual_quote_id = int(call.data[9:])
+        quote = pending[actual_quote_id]
         next_quote_id = len(queue.keys())
         queue.update({str(next_quote_id): quote})
 
@@ -272,12 +275,18 @@ def button_handler(call):
 
         bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID,
                               call.message.id, reply_markup=None)
-        bot.unpin_chat_message(MOD_ID, pinned_pending[call_cnt].message_id)
+        try:
+            pending.pop(actual_quote_id)
+        except KeyError:
+            pass
     elif call.data[:6] == 'reject':
-        call_cnt = int(call.data[8:])
+        actual_quote_id = int(call.data[8:])
         bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
                               call.message.id, reply_markup=None)
-        bot.unpin_chat_message(MOD_ID, pinned_pending[call_cnt].message_id)
+        try:
+            pending.pop(actual_quote_id)
+        except KeyError:
+            pass
     elif call.data == 'clear: yes':
         save_json(dict(), 'queue.json')
 
@@ -288,6 +297,10 @@ def button_handler(call):
         bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID,
                               call.message.id, reply_markup=None)
     bot.answer_callback_query(call.id)
+    try:
+        bot.unpin_chat_message(MOD_ID, pinned_pending[actual_quote_id].message_id)
+    except KeyError:
+        bot.send_message(MOD_ID, 'Возникла проблема с обработкой цитаты :( Если это необходимо, проведи ее вручную.')
 
 
 Thread(target=bot.polling, args=()).start()
