@@ -275,18 +275,14 @@ def button_handler(call):
 
         bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID,
                               call.message.id, reply_markup=None)
-        try:
+        if actual_quote_id in pending.keys():
             pending.pop(actual_quote_id)
-        except KeyError:
-            pass
     elif call.data[:6] == 'reject':
         actual_quote_id = int(call.data[8:])
         bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
                               call.message.id, reply_markup=None)
-        try:
+        if actual_quote_id in pending.keys():
             pending.pop(actual_quote_id)
-        except KeyError:
-            pass
     elif call.data == 'clear: yes':
         save_json(dict(), 'queue.json')
 
