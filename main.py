@@ -104,11 +104,18 @@ def suggest(message):
 def ban(message):
     if message.chat.id == MOD_ID:
         args = message.text[5:].split(' ')
-        if len(args) == 2:
-            user_id, period = args
-        else:
+        if len(args) >= 2:
+            user_id, period = args[0], args[1]
+
+            if not period.isdigit():
+                bot.send_message(message.chat.id, 'Введи корректное значение срока блокировки!')
+                return
+        elif len(args) == 1:
             user_id = args[0]
             period = BAN_TIME
+        else:
+            bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+            return
 
         if not user_id.isdigit():
             bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
