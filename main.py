@@ -104,11 +104,18 @@ def suggest(message):
 def ban(message):
     if message.chat.id == MOD_ID:
         args = message.text[5:].split(' ')
-        if len(args) == 2:
-            user_id, period = args
-        else:
+        if len(args) >= 2:
+            user_id, period = args[0], args[1]
+
+            if not period.isdigit():
+                bot.send_message(message.chat.id, 'Введи корректное значение срока блокировки!')
+                return
+        elif len(args) == 1:
             user_id = args[0]
             period = BAN_TIME
+        else:
+            bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+            return
 
         if not user_id.isdigit():
             bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
@@ -275,14 +282,18 @@ def button_handler(call):
 
         bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID,
                               call.message.id, reply_markup=None)
-        if actual_quote_id in pending.keys():
+        try:
             pending.pop(actual_quote_id)
+        except KeyError:
+            pass
     elif call.data[:6] == 'reject':
         actual_quote_id = int(call.data[8:])
         bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
                               call.message.id, reply_markup=None)
-        if actual_quote_id in pending.keys():
+        try:
             pending.pop(actual_quote_id)
+        except KeyError:
+            pass
     elif call.data == 'clear: yes':
         save_json(dict(), 'queue.json')
 
@@ -297,7 +308,6 @@ def button_handler(call):
         bot.unpin_chat_message(MOD_ID, pinned_pending[actual_quote_id].message_id)
     except KeyError:
         bot.send_message(MOD_ID, 'Возникла проблема с обработкой цитаты :( Если это необходимо, проведи ее вручную.')
-
 
 
 if __name__ == "__main__":
