@@ -290,7 +290,7 @@ def button_handler(call):
             pending.pop(actual_quote_id)
         if actual_quote_id in pending_authors.keys():
             author_id = pending_authors[actual_quote_id]
-            bot.send_message(author_id, 'Ваша цитата была опубликована!')
+            bot.send_message(author_id, 'Ваша цитата отправлена в очередь на публикацию!')
     elif call.data[:6] == 'reject':
         actual_quote_id = int(call.data[8:])
         bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
@@ -312,7 +312,7 @@ def button_handler(call):
             pending.pop(actual_quote_id)
         if actual_quote_id in pending_authors.keys():
             author_id = pending_authors[actual_quote_id]
-            bot.send_message(author_id, 'Ваша цитата была отправлена на редактирование, ожидайте!')
+            bot.send_message(author_id, 'Ваша цитата будет отредактирована и добавлена в очередь на публикацию!')
     elif call.data == 'clear: yes':
         save_json(dict(), 'queue.json')
 
