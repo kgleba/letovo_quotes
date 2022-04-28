@@ -55,16 +55,18 @@ def reformat_quote(text):
     if text.find('#') == -1:
         return text
     text = list(text.strip())
-    symbol = text.index('#')
-    while text[symbol - 1] == '\n':
-        text.pop(symbol - 1)
-        symbol -= 1
-    while symbol < len(text):
-        if text[symbol] == ' ' or text[symbol] == '\n':
+    while '#' in text:
+        symbol = text.index('#')
+        while text[symbol - 1] == '\n':
+            text.pop(symbol - 1)
+            symbol -= 1
+        while symbol < len(text):
+            if text[symbol] == ' ' or text[symbol] == '\n':
+                text.pop(symbol)
+                break
+            tag += text[symbol]
             text.pop(symbol)
-            break
-        tag += text[symbol]
-        text.pop(symbol)
+        tag += ' '
 
     text.append(f'\n\n{tag}')
     return ''.join(text)
