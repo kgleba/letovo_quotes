@@ -11,8 +11,6 @@ BAN_TIME = 3600
 
 bot = telebot.TeleBot(TOKEN)
 pending = {}
-pinned_pending = {}
-pending_authors = {}
 call_count = 0
 
 _banlist = open('banlist.json', 'wb')
@@ -67,10 +65,10 @@ def suggest(message):
     if author is None:
         author = message.from_user.first_name + ' ' + message.from_user.last_name
     if quote:
-        for i in pending.values():
-            if check_similarity(i, quote) > 75:
+        for i in pending.keys():
+            if check_similarity(pending[i]['text'], quote) > 75:
                 bot.send_message(message.chat.id,
-                                 'Подобная цитата уже отправлена в предложку! Флудить не стоит, ожидай решения модерации :)')
+                                 'Подобная цитата уже отправлена в предложку! Флудить не стоит, ожидай ответа модерации :)')
                 return
 
         banlist = open_json('banlist.json')
@@ -83,16 +81,17 @@ def suggest(message):
             keyboard = telebot.types.InlineKeyboardMarkup()
             keyboard.add(
                 telebot.types.InlineKeyboardButton(text='🔔 Опубликовать', callback_data=f'publish: {call_count}'))
-            pending.update({call_count: quote})
+            pending.update({call_count: {'text': quote}})
 
             keyboard.add(telebot.types.InlineKeyboardButton(text='🚫 Отменить', callback_data=f'reject: {call_count}'))
-            keyboard.add(telebot.types.InlineKeyboardButton(text='✎ Редактировать', callback_data=f'edit: {call_count}'))
+            keyboard.add(
+                telebot.types.InlineKeyboardButton(text='✎ Редактировать', callback_data=f'edit: {call_count}'))
             sent_quote = bot.send_message(MOD_ID,
                                           f'Пользователь @{author} [ID: {author_id}] предложил следующую цитату:\n\n{quote}',
                                           reply_markup=keyboard)
             bot.pin_chat_message(MOD_ID, sent_quote.message_id)
-            pinned_pending.update({call_count: sent_quote})
-            pending_authors.update({call_count: author_id})
+            pending[call_count]['object'] = sent_quote
+            pending[call_count]['author_id'] = author_id
             call_count += 1
         else:
             bot.send_message(message.chat.id,
@@ -273,61 +272,68 @@ def edit_quote(message):
 
 @bot.callback_query_handler(func=lambda call: True)
 def button_handler(call):
-    actual_quote_id = 0
-    if call.data[:7] == 'publish':
-        queue = open_json('queue.json')
-        actual_quote_id = int(call.data[9:])
-        quote = pending[actual_quote_id]
-        next_quote_id = len(queue.keys())
-        queue.update({str(next_quote_id): quote})
+    action = call.data.split(':')
 
-        save_json(queue, 'queue.json')
-        push_gitlab('queue.json')
+    if action[0] in ['publish', 'reject', 'edit']:
+        actual_quote_id = int(action[1])
+        quote = pending[actual_quote_id]['text']
 
-        bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID,
-                              call.message.id, reply_markup=None)
-        if actual_quote_id in pending.keys():
-            pending.pop(actual_quote_id)
-        if actual_quote_id in pending_authors.keys():
-            author_id = pending_authors[actual_quote_id]
-            bot.send_message(author_id, 'Ваша цитата отправлена в очередь на публикацию!')
-    elif call.data[:6] == 'reject':
-        actual_quote_id = int(call.data[8:])
-        bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
-                              call.message.id, reply_markup=None)
-        if actual_quote_id in pending.keys():
-            pending.pop(actual_quote_id)
-        if actual_quote_id in pending_authors.keys():
-            author_id = pending_authors[actual_quote_id]
-            bot.send_message(author_id, 'Ваша цитата была отклонена :(')
-    elif call.data[:4] == 'edit':
-        actual_quote_id = int(call.data[6:])
-        bot.send_message(MOD_ID, 'Текст для редактирования:')
-        bot.send_message(MOD_ID, pending[actual_quote_id])
+        author_id = 0
+        relevance = False
 
-        bot.edit_message_text(f'{call.message.text}\n\nОтредактировано модератором @{call.from_user.username}', MOD_ID,
-                              call.message.id, reply_markup=None)
+        if actual_quote_id not in pending.keys():
+            bot.reply_to(call.message,
+                         'Возникла проблема с обработкой цитаты :( Если это необходимо, проведи ее вручную.')
+            return
 
         if actual_quote_id in pending.keys():
-            pending.pop(actual_quote_id)
-        if actual_quote_id in pending_authors.keys():
-            author_id = pending_authors[actual_quote_id]
-            bot.send_message(author_id, 'Ваша цитата будет отредактирована и добавлена в очередь на публикацию!')
-    elif call.data == 'clear: yes':
-        save_json(dict(), 'queue.json')
+            relevance = True
+            author_id = pending[actual_quote_id]['author_id']
 
-        bot.edit_message_text('Успешно очистил очередь публикаций!', MOD_ID,
-                              call.message.id, reply_markup=None)
-        push_gitlab('queue.json')
-    elif call.data == 'clear: no':
-        bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID,
-                              call.message.id, reply_markup=None)
+        if action[0] == 'publish':
+            queue = open_json('queue.json')
+
+            next_quote_id = len(queue.keys())
+            queue.update({str(next_quote_id): quote})
+
+            save_json(queue, 'queue.json')
+            push_gitlab('queue.json')
+
+            bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID,
+                                  call.message.id, reply_markup=None)
+            if relevance:
+                bot.send_message(author_id, 'Ваша цитата была опубликована!')
+
+        elif action[0] == 'reject':
+            bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
+                                  call.message.id, reply_markup=None)
+            if relevance:
+                bot.send_message(author_id, 'Ваша цитата была отклонена :(')
+
+        elif action[0] == 'edit':
+            bot.send_message(MOD_ID, 'Текст для редактирования:')
+            bot.send_message(MOD_ID, quote)
+
+            bot.edit_message_text(f'{call.message.text}\n\nОтредактировано модератором @{call.from_user.username}', MOD_ID,
+                                  call.message.id, reply_markup=None)
+            if relevance:
+                bot.send_message(author_id, 'Ваша цитата была отправлена на редактирование, ожидайте!')
+
+        bot.unpin_chat_message(MOD_ID, pending[actual_quote_id]['object'].message_id)
+        pending.pop(actual_quote_id)
+
+    else:
+        if call.data == 'clear: yes':
+            save_json(dict(), 'queue.json')
+
+            bot.edit_message_text('Успешно очистил очередь публикаций!', MOD_ID,
+                                  call.message.id, reply_markup=None)
+            push_gitlab('queue.json')
+        elif call.data == 'clear: no':
+            bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID,
+                                  call.message.id, reply_markup=None)
 
     bot.answer_callback_query(call.id)
-    try:
-        bot.unpin_chat_message(MOD_ID, pinned_pending[actual_quote_id].message_id)
-    except KeyError:
-        bot.send_message(MOD_ID, 'Возникла проблема с обработкой цитаты :( Если это необходимо, проведи ее вручную.')
 
 
 if __name__ == "__main__":
