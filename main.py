@@ -2,6 +2,7 @@ import time
 from threading import Thread
 import schedule
 import telebot
+from flask import Flask, request
 from backend import *
 
 TOKEN = os.getenv('BOT_TOKEN')
@@ -10,26 +11,27 @@ MOD_ID = -1001791070494
 BAN_TIME = 3600
 
 bot = telebot.TeleBot(TOKEN)
+
 pending = {}
 call_count = 0
 
-_banlist = open('banlist.json', 'wb')
+raw_banlist = open('banlist.json', 'wb')
 try:
-    project.files.raw(file_path='banlist.json', ref='main', streamed=True, action=_banlist.write)
+    project.files.raw(file_path='banlist.json', ref='main', streamed=True, action=raw_banlist.write)
 except gitlab.exceptions.GitlabGetError:
     pass
-_banlist.close()
+raw_banlist.close()
 
-_queue = open('queue.json', 'wb')
+raw_queue = open('queue.json', 'wb')
 try:
-    project.files.raw(file_path='queue.json', ref='main', streamed=True, action=_queue.write)
+    project.files.raw(file_path='queue.json', ref='main', streamed=True, action=raw_queue.write)
 except gitlab.exceptions.GitlabGetError:
     pass
-_queue.close()
+raw_queue.close()
 
 
 def format_time(value):
-    return time.strftime("%H:%M:%S", time.gmtime(value))
+    return time.strftime('%H:%M:%S', time.gmtime(value))
 
 
 def publish_quote():
@@ -325,12 +327,50 @@ def button_handler(call):
         elif call.data == 'clear: no':
             bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID,
                                   call.message.id, reply_markup=None)
-
+        elif call.data[:6] == 'reject':
+            actual_quote_id = int(call.data[8:])
+            bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
+                                  call.message.id, reply_markup=None)
+            try:
+                pending.pop(actual_quote_id)
+            except KeyError:
+                pass
+        elif call.data == 'clear: yes':
+            save_json(dict(), 'queue.json')
+    
+            bot.edit_message_text('Успешно очистил очередь публикаций!', MOD_ID,
+                                  call.message.id, reply_markup=None)
+            push_gitlab('queue.json')
+        elif call.data == 'clear: no':
+            bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID,
+                                  call.message.id, reply_markup=None)
+    
     bot.answer_callback_query(call.id)
+    
+
+if __name__ == '__main__':
+    if 'HEROKU' in os.environ.keys():
+        server = Flask('__main__')
 
 
-if __name__ == "__main__":
-    Thread(target=bot.polling, args=()).start()
+        @server.route('/bot', methods=['POST'])
+        def get_messages():
+            bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode('utf-8'))])
+            return '!', 200
+
+
+        @server.route('/')
+        def webhook():
+            bot.remove_webhook()
+            bot.set_webhook(url='https://letovo-quotes.herokuapp.com/bot')
+            return '?', 200
+
+
+        Thread(target=server.run, args=('0.0.0.0', os.environ.get('PORT', 80))).start()
+    else:
+        bot.remove_webhook()
+        Thread(target=bot.polling, args=()).start()
+
 schedule.every().day.at('09:00').do(publish_quote)
 schedule.every().day.at('15:00').do(publish_quote)
 
