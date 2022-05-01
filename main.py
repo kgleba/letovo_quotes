@@ -148,6 +148,7 @@ def unban(message):
 
         if user_id not in banlist.keys():
             bot.send_message(MOD_ID, f'Пользователь {user_id} не заблокирован!')
+            return
         else:
             banlist.pop(user_id)
 
@@ -345,7 +346,7 @@ def button_handler(call):
                                   call.message.id, reply_markup=None)
     
     bot.answer_callback_query(call.id)
-
+    
 
 if __name__ == '__main__':
     if 'HEROKU' in os.environ.keys():
