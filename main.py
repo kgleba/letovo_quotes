@@ -326,33 +326,24 @@ def button_handler(call):
         elif call.data == 'clear: no':
             bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID,
                                   call.message.id, reply_markup=None)
-
-<<<<<<< Updated upstream
-        bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID,
-                              call.message.id, reply_markup=None)
-        try:
-            pending.pop(actual_quote_id)
-        except KeyError:
-            pass
-    elif call.data[:6] == 'reject':
-        actual_quote_id = int(call.data[8:])
-        bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
-                              call.message.id, reply_markup=None)
-        try:
-            pending.pop(actual_quote_id)
-        except KeyError:
-            pass
-    elif call.data == 'clear: yes':
-        save_json(dict(), 'queue.json')
-
-        bot.edit_message_text('Успешно очистил очередь публикаций!', MOD_ID,
-                              call.message.id, reply_markup=None)
-        push_gitlab('queue.json')
-    elif call.data == 'clear: no':
-        bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID,
-                              call.message.id, reply_markup=None)
-=======
->>>>>>> Stashed changes
+        elif call.data[:6] == 'reject':
+            actual_quote_id = int(call.data[8:])
+            bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
+                                  call.message.id, reply_markup=None)
+            try:
+                pending.pop(actual_quote_id)
+            except KeyError:
+                pass
+        elif call.data == 'clear: yes':
+            save_json(dict(), 'queue.json')
+    
+            bot.edit_message_text('Успешно очистил очередь публикаций!', MOD_ID,
+                                  call.message.id, reply_markup=None)
+            push_gitlab('queue.json')
+        elif call.data == 'clear: no':
+            bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID,
+                                  call.message.id, reply_markup=None)
+    
     bot.answer_callback_query(call.id)
 
 
