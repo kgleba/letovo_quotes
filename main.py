@@ -340,9 +340,7 @@ if __name__ == '__main__':
 
         @server.route(f'/bot{SECURITY_TOKEN}', methods=['POST'])
         def get_messages():
-            data = request.stream.read().decode('utf-8')
-            bot.process_new_updates([telebot.types.Update.de_json(data)])
-            print(data)
+            bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode('utf-8'))])
             return '!', 200
 
 
