@@ -278,17 +278,12 @@ def button_handler(call):
         actual_quote_id = int(action[1])
         quote = pending[actual_quote_id]['text']
 
-        author_id = 0
-        relevance = False
-
         if actual_quote_id not in pending.keys():
             bot.reply_to(call.message,
                          'Возникла проблема с обработкой цитаты :( Если это необходимо, проведи ее вручную.')
             return
 
-        if actual_quote_id in pending.keys():
-            relevance = True
-            author_id = pending[actual_quote_id]['author_id']
+        author_id = pending[actual_quote_id]['author_id']
 
         if action[0] == 'publish':
             queue = open_json('queue.json')
@@ -301,23 +296,21 @@ def button_handler(call):
 
             bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID,
                                   call.message.id, reply_markup=None)
-            if relevance:
-                bot.send_message(author_id, 'Ваша цитата была опубликована!')
+            bot.send_message(author_id, 'Ваша цитата была опубликована!')
 
         elif action[0] == 'reject':
             bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
                                   call.message.id, reply_markup=None)
-            if relevance:
-                bot.send_message(author_id, 'Ваша цитата была отклонена :(')
+            bot.send_message(author_id, 'Ваша цитата была отклонена :(')
 
         elif action[0] == 'edit':
             bot.send_message(MOD_ID, 'Текст для редактирования:')
             bot.send_message(MOD_ID, quote)
 
-            bot.edit_message_text(f'{call.message.text}\n\nОтредактировано модератором @{call.from_user.username}', MOD_ID,
+            bot.edit_message_text(f'{call.message.text}\n\nОтредактировано модератором @{call.from_user.username}',
+                                  MOD_ID,
                                   call.message.id, reply_markup=None)
-            if relevance:
-                bot.send_message(author_id, 'Ваша цитата была отправлена на редактирование, ожидайте!')
+            bot.send_message(author_id, 'Ваша цитата была отправлена на редактирование, ожидайте!')
 
         bot.unpin_chat_message(MOD_ID, pending[actual_quote_id]['object'].message_id)
         pending.pop(actual_quote_id)
