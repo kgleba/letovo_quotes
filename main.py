@@ -149,6 +149,7 @@ def unban(message):
 
         if user_id not in banlist.keys():
             bot.send_message(MOD_ID, f'Пользователь {user_id} не заблокирован!')
+            return
         else:
             banlist.pop(user_id)
 
@@ -182,10 +183,13 @@ def add_queue(message):
 def get_queue(message):
     if message.chat.id == MOD_ID:
         queue = open_json('queue.json')
-        for quote_id, quote in queue.items():
-            bot.send_message(MOD_ID, f'#*{quote_id}*\n{quote}', parse_mode='Markdown')
+
         if queue == dict():
             bot.send_message(MOD_ID, 'Очередь публикации пуста!')
+            return
+
+        for quote_id, quote in queue.items():
+            bot.send_message(MOD_ID, f'#*{quote_id}*\n{quote}', parse_mode='Markdown')
     else:
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
@@ -217,7 +221,7 @@ def del_queue(message):
 
         quote_id = message.text[10:].replace(' ', '')
         if quote_id not in queue.keys():
-            bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
+            bot.send_message(message.chat.id, 'Цитаты с таким номером не существует!')
             return
 
         for key in range(int(quote_id), len(queue.keys()) - 1):
@@ -251,20 +255,18 @@ def edit_quote(message):
         args = message.text[12:].split('; ')
         if len(args) == 2:
             quote_id, new_text = args
-            if not quote_id.isdigit():
-                bot.send_message(MOD_ID, 'Введи корректное значение идентификатора!')
-                return
-
             queue = open_json('queue.json')
+
             if quote_id in queue.keys():
                 queue[quote_id] = new_text
             else:
                 bot.send_message(MOD_ID, 'Цитаты с таким номером не существует!')
                 return
-            bot.send_message(MOD_ID, f'Успешно изменил цитату под номером {quote_id}!')
+
             save_json(queue, 'queue.json')
             push_gitlab('queue.json')
 
+            bot.send_message(MOD_ID, f'Успешно изменил цитату под номером {quote_id}!')
         else:
             bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
             return
@@ -320,27 +322,10 @@ def button_handler(call):
     else:
         if call.data == 'clear: yes':
             save_json(dict(), 'queue.json')
+            push_gitlab('queue.json')
 
             bot.edit_message_text('Успешно очистил очередь публикаций!', MOD_ID,
                                   call.message.id, reply_markup=None)
-            push_gitlab('queue.json')
-        elif call.data == 'clear: no':
-            bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID,
-                                  call.message.id, reply_markup=None)
-        elif call.data[:6] == 'reject':
-            actual_quote_id = int(call.data[8:])
-            bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
-                                  call.message.id, reply_markup=None)
-            try:
-                pending.pop(actual_quote_id)
-            except KeyError:
-                pass
-        elif call.data == 'clear: yes':
-            save_json(dict(), 'queue.json')
-
-            bot.edit_message_text('Успешно очистил очередь публикаций!', MOD_ID,
-                                  call.message.id, reply_markup=None)
-            push_gitlab('queue.json')
         elif call.data == 'clear: no':
             bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID,
                                   call.message.id, reply_markup=None)
@@ -355,8 +340,9 @@ if __name__ == '__main__':
 
         @server.route(f'/bot{SECURITY_TOKEN}', methods=['POST'])
         def get_messages():
-            bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode('utf-8'))])
-            print(request.stream.read().decode('utf-8'))
+            data = request.stream.read().decode('utf-8')
+            bot.process_new_updates([telebot.types.Update.de_json(data)])
+            print(data)
             return '!', 200
 
 
