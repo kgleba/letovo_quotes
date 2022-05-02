@@ -300,7 +300,7 @@ def button_handler(call):
 
             bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID,
                                   call.message.id, reply_markup=None)
-            bot.send_message(author_id, 'Ваша цитата была опубликована!')
+            bot.send_message(author_id, 'Ваша цитата отправлена в очередь на публикацию!')
 
         elif action[0] == 'reject':
             bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
@@ -314,7 +314,7 @@ def button_handler(call):
             bot.edit_message_text(f'{call.message.text}\n\nОтредактировано модератором @{call.from_user.username}',
                                   MOD_ID,
                                   call.message.id, reply_markup=None)
-            bot.send_message(author_id, 'Ваша цитата была отправлена на редактирование, ожидайте!')
+            bot.send_message(author_id, 'Ваша цитата будет отредактирована и добавлена в очередь на публикацию!')
 
         bot.unpin_chat_message(MOD_ID, pending[actual_quote_id]['object'].message_id)
         pending.pop(actual_quote_id)
