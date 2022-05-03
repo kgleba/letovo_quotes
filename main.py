@@ -13,9 +13,6 @@ BAN_TIME = 3600
 
 bot = telebot.TeleBot(TOKEN)
 
-pending = {}
-call_count = 0
-
 raw_banlist = open('banlist.json', 'wb')
 try:
     project.files.raw(file_path='banlist.json', ref='main', streamed=True, action=raw_banlist.write)
@@ -29,6 +26,13 @@ try:
 except gitlab.exceptions.GitlabGetError:
     pass
 raw_queue.close()
+
+raw_pending = open('pending.json', 'wb')
+try:
+    project.files.raw(file_path='pending.json', ref='main', streamed=True, action=raw_pending.write)
+except gitlab.exceptions.GitlabGetError:
+    pass
+raw_pending.close()
 
 
 def format_time(value):
@@ -61,13 +65,17 @@ def hello(message):
 
 @bot.message_handler(commands=['suggest'])
 def suggest(message):
-    global pending, call_count
     quote = reformat_quote(message.text[9:])
     author = message.from_user.username
     author_id = str(message.from_user.id)
     if author is None:
         author = message.from_user.first_name + ' ' + message.from_user.last_name
     if quote:
+        if len(quote) > 500:
+            bot.send_message(message.chat.id, 'Отправленная цитата слишком большая!')
+            return
+
+        pending = open_json('pending.json')
         for i in pending.keys():
             if check_similarity(pending[i]['text'], quote) > 75:
                 bot.send_message(message.chat.id,
@@ -80,6 +88,7 @@ def suggest(message):
             save_json(banlist, 'banlist.json')
             push_gitlab('banlist.json')
         if author_id not in banlist.keys():
+            call_count = max(map(int, pending.keys())) + 1 if pending.keys() else 0
             bot.send_message(message.chat.id, 'Принято! Отправил твою цитату в предложку :)')
             keyboard = telebot.types.InlineKeyboardMarkup()
             keyboard.add(
@@ -93,9 +102,10 @@ def suggest(message):
                                           f'Пользователь @{author} [ID: {author_id}] предложил следующую цитату:\n\n{quote}',
                                           reply_markup=keyboard)
             bot.pin_chat_message(MOD_ID, sent_quote.message_id)
-            pending[call_count]['object'] = sent_quote
+            pending[call_count]['message_id'] = sent_quote.message_id
             pending[call_count]['author_id'] = author_id
-            call_count += 1
+            save_json(pending, 'pending.json')
+            push_gitlab('pending.json')
         else:
             bot.send_message(message.chat.id,
                              f'Вы были заблокированы, поэтому не можете предлагать цитаты. Оставшееся время блокировки: {format_time(banlist[author_id] - int(time.time()))}')
@@ -277,9 +287,10 @@ def edit_quote(message):
 @bot.callback_query_handler(func=lambda call: True)
 def button_handler(call):
     action = call.data.split(':')
+    pending = open_json('pending.json')
 
     if action[0] in ['publish', 'reject', 'edit']:
-        actual_quote_id = int(action[1])
+        actual_quote_id = action[1].replace(' ', '')
         quote = pending[actual_quote_id]['text']
 
         if actual_quote_id not in pending.keys():
@@ -316,9 +327,11 @@ def button_handler(call):
                                   call.message.id, reply_markup=None)
             bot.send_message(author_id, 'Ваша цитата будет отредактирована и добавлена в очередь на публикацию!')
 
-        bot.unpin_chat_message(MOD_ID, pending[actual_quote_id]['object'].message_id)
+        bot.unpin_chat_message(MOD_ID, pending[actual_quote_id]['message_id'])
         pending.pop(actual_quote_id)
 
+        save_json(pending, 'pending.json')
+        push_gitlab('pending.json')
     else:
         if call.data == 'clear: yes':
             save_json(dict(), 'queue.json')
