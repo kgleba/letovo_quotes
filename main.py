@@ -1,9 +1,10 @@
+import os
 import time
 from threading import Thread
 import schedule
 import telebot
 from flask import Flask, request
-from backend import *
+import backend
 
 TOKEN = os.getenv('BOT_TOKEN')
 SECURITY_TOKEN = os.getenv('SERVER_TOKEN')
@@ -13,36 +14,19 @@ BAN_TIME = 3600
 
 bot = telebot.TeleBot(TOKEN)
 
-raw_banlist = open('banlist.json', 'wb')
-try:
-    project.files.raw(file_path='banlist.json', ref='main', streamed=True, action=raw_banlist.write)
-except gitlab.exceptions.GitlabGetError:
-    pass
-raw_banlist.close()
-
-raw_queue = open('queue.json', 'wb')
-try:
-    project.files.raw(file_path='queue.json', ref='main', streamed=True, action=raw_queue.write)
-except gitlab.exceptions.GitlabGetError:
-    pass
-raw_queue.close()
-
-raw_pending = open('pending.json', 'wb')
-try:
-    project.files.raw(file_path='pending.json', ref='main', streamed=True, action=raw_pending.write)
-except gitlab.exceptions.GitlabGetError:
-    pass
-raw_pending.close()
+backend.load_json('queue.json')
+backend.load_json('banlist.json')
+backend.load_json('pending.json')
 
 
-def format_time(value):
-    return time.strftime('%H:%M:%S', time.gmtime(value))
+def format_time(raw):
+    return time.strftime('%H:%M:%S', time.gmtime(raw))
 
 
 def publish_quote():
-    queue = open_json('queue.json')
+    queue = backend.open_json('queue.json')
 
-    if queue == dict():
+    if queue == {}:
         bot.send_message(MOD_ID, text='Цитаты в очереди закончились! :(')
         return
 
@@ -52,8 +36,7 @@ def publish_quote():
         queue[str(key)] = queue[str(int(key) + 1)]
     queue.pop(str(len(queue.keys()) - 1))
 
-    save_json(queue, 'queue.json')
-    push_gitlab('queue.json')
+    backend.save_json(queue, 'queue.json')
 
 
 @bot.message_handler(commands=['start'])
@@ -65,47 +48,53 @@ def hello(message):
 
 @bot.message_handler(commands=['suggest'])
 def suggest(message):
-    quote = reformat_quote(message.text[9:])
-    author = message.from_user.username
+    quote = backend.reformat_quote(message.text[9:])
+
+    author = message.from_user
+    author_name = author.username
     author_id = str(message.from_user.id)
-    if author is None:
-        author = message.from_user.first_name + ' ' + message.from_user.last_name
+
+    if author_name is None:
+        author_name = author.first_name + ' ' + author.last_name
+
     if quote:
         if len(quote) > 500:
             bot.send_message(message.chat.id, 'Отправленная цитата слишком большая!')
             return
 
-        pending = open_json('pending.json')
+        pending = backend.open_json('pending.json')
+
         for i in pending.keys():
-            if check_similarity(pending[i]['text'], quote) > 75:
+            if backend.check_similarity(pending[i]['text'], quote) > 75:
                 bot.send_message(message.chat.id,
                                  'Подобная цитата уже отправлена в предложку! Флудить не стоит, ожидай ответа модерации :)')
                 return
 
-        banlist = open_json('banlist.json')
+        banlist = backend.open_json('banlist.json')
+
         if author_id in banlist.keys() and int(time.time()) > banlist[author_id]:
             banlist.pop(author_id)
-            save_json(banlist, 'banlist.json')
-            push_gitlab('banlist.json')
-        if author_id not in banlist.keys():
-            call_count = max(map(int, pending.keys())) + 1 if pending.keys() else 0
-            bot.send_message(message.chat.id, 'Принято! Отправил твою цитату в предложку :)')
-            keyboard = telebot.types.InlineKeyboardMarkup()
-            keyboard.add(
-                telebot.types.InlineKeyboardButton(text='🔔 Опубликовать', callback_data=f'publish: {call_count}'))
-            pending.update({call_count: {'text': quote}})
+            backend.save_json(banlist, 'banlist.json')
 
+        if author_id not in banlist.keys():
+            if pending.keys():
+                call_count = max(map(int, pending.keys())) + 1
+            else:
+                call_count = 0
+
+            bot.send_message(message.chat.id, 'Принято! Отправил твою цитату в предложку :)')
+
+            keyboard = telebot.types.InlineKeyboardMarkup()
+            keyboard.add(telebot.types.InlineKeyboardButton(text='🔔 Опубликовать', callback_data=f'publish: {call_count}'))
             keyboard.add(telebot.types.InlineKeyboardButton(text='🚫 Отменить', callback_data=f'reject: {call_count}'))
-            keyboard.add(
-                telebot.types.InlineKeyboardButton(text='✎ Редактировать', callback_data=f'edit: {call_count}'))
-            sent_quote = bot.send_message(MOD_ID,
-                                          f'Пользователь @{author} [ID: {author_id}] предложил следующую цитату:\n\n{quote}',
-                                          reply_markup=keyboard)
+            keyboard.add(telebot.types.InlineKeyboardButton(text='✎ Редактировать', callback_data=f'edit: {call_count}'))
+
+            sent_quote = bot.send_message(MOD_ID, f'Пользователь @{author_name} [ID: {author_id}] предложил следующую цитату:\n\n{quote}', reply_markup=keyboard)
             bot.pin_chat_message(MOD_ID, sent_quote.message_id)
-            pending[call_count]['message_id'] = sent_quote.message_id
-            pending[call_count]['author_id'] = author_id
-            save_json(pending, 'pending.json')
-            push_gitlab('pending.json')
+
+            pending.update({call_count: {'text': quote, 'message_id': sent_quote.message_id, 'author_id': author_id}})
+
+            backend.save_json(pending, 'pending.json')
         else:
             bot.send_message(message.chat.id,
                              f'Вы были заблокированы, поэтому не можете предлагать цитаты. Оставшееся время блокировки: {format_time(banlist[author_id] - int(time.time()))}')
@@ -119,6 +108,7 @@ def suggest(message):
 def ban(message):
     if message.chat.id == MOD_ID:
         args = message.text[5:].split(' ')
+
         if len(args) >= 2:
             user_id, period = args[0], args[1]
 
@@ -136,12 +126,10 @@ def ban(message):
             bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
             return
 
-        banlist = open_json('banlist.json')
-
+        banlist = backend.open_json('banlist.json')
         banlist.update({user_id: int(time.time()) + int(period)})
+        backend.save_json(banlist, 'banlist.json')
 
-        save_json(banlist, 'banlist.json')
-        push_gitlab('banlist.json')
         bot.send_message(MOD_ID, f'Пользователь {user_id} успешно заблокирован!')
     else:
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
@@ -151,11 +139,12 @@ def ban(message):
 def unban(message):
     if message.chat.id == MOD_ID:
         user_id = message.text[6:].replace(' ', '')
+
         if not user_id.isdigit():
             bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
             return
 
-        banlist = open_json('banlist.json')
+        banlist = backend.open_json('banlist.json')
 
         if user_id not in banlist.keys():
             bot.send_message(MOD_ID, f'Пользователь {user_id} не заблокирован!')
@@ -163,9 +152,9 @@ def unban(message):
         else:
             banlist.pop(user_id)
 
-        save_json(banlist, 'banlist.json')
-        push_gitlab('banlist.json')
         bot.send_message(MOD_ID, f'Пользователь {user_id} успешно разблокирован!')
+
+        backend.save_json(banlist, 'banlist.json')
     else:
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
@@ -176,15 +165,16 @@ def add_queue(message):
         if len(message.text) == 6:
             bot.send_message(message.chat.id, 'Эта команда должна содержать какой-то параметр!')
             return
-        queue = open_json('queue.json')
+
+        queue = backend.open_json('queue.json')
 
         next_quote_id = len(queue.keys())
         quote = message.text[7:]
         queue.update({str(next_quote_id): quote})
 
-        save_json(queue, 'queue.json')
-        push_gitlab('queue.json')
         bot.send_message(MOD_ID, 'Успешно занес цитату в очередь публикации!')
+
+        backend.save_json(queue, 'queue.json')
     else:
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
@@ -192,14 +182,14 @@ def add_queue(message):
 @bot.message_handler(commands=['get_queue'])
 def get_queue(message):
     if message.chat.id == MOD_ID:
-        queue = open_json('queue.json')
+        queue = backend.open_json('queue.json')
 
-        if queue == dict():
+        if queue == {}:
             bot.send_message(MOD_ID, 'Очередь публикации пуста!')
             return
 
         for quote_id, quote in queue.items():
-            bot.send_message(MOD_ID, f'#*{quote_id}*\n{quote}', parse_mode='Markdown')
+            bot.send_message(MOD_ID, f'#{quote_id}\n{quote}')
     else:
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
@@ -207,13 +197,14 @@ def get_queue(message):
 @bot.message_handler(commands=['get_banlist'])
 def get_banlist(message):
     if message.chat.id == MOD_ID:
-        banlist = open_json('banlist.json')
+        banlist = backend.open_json('banlist.json')
 
-        if banlist == dict():
+        if banlist == {}:
             bot.send_message(MOD_ID, 'Список заблокированных пользователей пуст!')
             return
 
         bot.send_message(MOD_ID, 'ID пользователя: время разблокировки')
+
         for key, value in banlist.items():
             bot.send_message(MOD_ID, key + ': ' + format_time(int(value)))
     else:
@@ -227,9 +218,10 @@ def del_queue(message):
             bot.send_message(message.chat.id, 'Эта команда должна содержать какой-то параметр!')
             return
 
-        queue = open_json('queue.json')
+        queue = backend.open_json('queue.json')
 
         quote_id = message.text[10:].replace(' ', '')
+
         if quote_id not in queue.keys():
             bot.send_message(message.chat.id, 'Цитаты с таким номером не существует!')
             return
@@ -238,10 +230,9 @@ def del_queue(message):
             queue[str(key)] = queue[str(int(key) + 1)]
         queue.pop(str(len(queue.keys()) - 1))
 
-        save_json(queue, 'queue.json')
-        push_gitlab('queue.json')
-
         bot.send_message(MOD_ID, f'Успешно удалил цитату с номером {quote_id}!')
+
+        backend.save_json(queue, 'queue.json')
     else:
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
@@ -250,10 +241,9 @@ def del_queue(message):
 def clear_queue(message):
     if message.chat.id == MOD_ID:
         keyboard = telebot.types.InlineKeyboardMarkup()
-        keyboard.add(
-            telebot.types.InlineKeyboardButton(text='➕ Да', callback_data=f'clear: yes'))
-        keyboard.add(
-            telebot.types.InlineKeyboardButton(text='➖ Нет', callback_data=f'clear: no'))
+        keyboard.add(telebot.types.InlineKeyboardButton(text='➕ Да', callback_data=f'clear: yes'))
+        keyboard.add(telebot.types.InlineKeyboardButton(text='➖ Нет', callback_data=f'clear: no'))
+
         bot.send_message(MOD_ID, 'Вы уверены в том, что хотите очистить очередь публикаций?', reply_markup=keyboard)
     else:
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
@@ -263,9 +253,10 @@ def clear_queue(message):
 def edit_quote(message):
     if message.chat.id == MOD_ID:
         args = message.text[12:].split('; ')
+
         if len(args) == 2:
             quote_id, new_text = args
-            queue = open_json('queue.json')
+            queue = backend.open_json('queue.json')
 
             if quote_id in queue.keys():
                 queue[quote_id] = new_text
@@ -273,10 +264,9 @@ def edit_quote(message):
                 bot.send_message(MOD_ID, 'Цитаты с таким номером не существует!')
                 return
 
-            save_json(queue, 'queue.json')
-            push_gitlab('queue.json')
-
             bot.send_message(MOD_ID, f'Успешно изменил цитату под номером {quote_id}!')
+
+            backend.save_json(queue, 'queue.json')
         else:
             bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
             return
@@ -287,7 +277,8 @@ def edit_quote(message):
 @bot.callback_query_handler(func=lambda call: True)
 def button_handler(call):
     action = call.data.split(':')
-    pending = open_json('pending.json')
+
+    pending = backend.open_json('pending.json')
 
     if action[0] in ['publish', 'reject', 'edit']:
         actual_quote_id = action[1].replace(' ', '')
@@ -301,47 +292,37 @@ def button_handler(call):
         author_id = pending[actual_quote_id]['author_id']
 
         if action[0] == 'publish':
-            queue = open_json('queue.json')
+            queue = backend.open_json('queue.json')
 
             next_quote_id = len(queue.keys())
             queue.update({str(next_quote_id): quote})
 
-            save_json(queue, 'queue.json')
-            push_gitlab('queue.json')
+            backend.save_json(queue, 'queue.json')
 
-            bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID,
-                                  call.message.id, reply_markup=None)
+            bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID, call.message.id, reply_markup=None)
             bot.send_message(author_id, 'Ваша цитата отправлена в очередь на публикацию!')
-
         elif action[0] == 'reject':
-            bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
-                                  call.message.id, reply_markup=None)
+            bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID, call.message.id, reply_markup=None)
             bot.send_message(author_id, 'Ваша цитата была отклонена :(')
-
         elif action[0] == 'edit':
             bot.send_message(MOD_ID, 'Текст для редактирования:')
             bot.send_message(MOD_ID, quote)
 
-            bot.edit_message_text(f'{call.message.text}\n\nОтредактировано модератором @{call.from_user.username}',
-                                  MOD_ID,
-                                  call.message.id, reply_markup=None)
+            bot.edit_message_text(f'{call.message.text}\n\nОтредактировано модератором @{call.from_user.username}', MOD_ID, call.message.id, reply_markup=None)
             bot.send_message(author_id, 'Ваша цитата будет отредактирована и добавлена в очередь на публикацию!')
 
         bot.unpin_chat_message(MOD_ID, pending[actual_quote_id]['message_id'])
+
         pending.pop(actual_quote_id)
 
-        save_json(pending, 'pending.json')
-        push_gitlab('pending.json')
+        backend.save_json(pending, 'pending.json')
     else:
         if call.data == 'clear: yes':
-            save_json(dict(), 'queue.json')
-            push_gitlab('queue.json')
+            backend.save_json({}, 'queue.json')
 
-            bot.edit_message_text('Успешно очистил очередь публикаций!', MOD_ID,
-                                  call.message.id, reply_markup=None)
+            bot.edit_message_text('Успешно очистил очередь публикаций!', MOD_ID, call.message.id, reply_markup=None)
         elif call.data == 'clear: no':
-            bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID,
-                                  call.message.id, reply_markup=None)
+            bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID, call.message.id, reply_markup=None)
 
     bot.answer_callback_query(call.id)
 

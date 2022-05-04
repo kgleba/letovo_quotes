@@ -1,12 +1,6 @@
 import os
 import json
 import gitlab
-from dotenv import load_dotenv
-
-DOTENV_PATH = 'api_keys.env'
-if os.path.exists(DOTENV_PATH):
-    load_dotenv(DOTENV_PATH)
-
 G_TOKEN = os.getenv('GITLAB_PAT')
 
 gl = gitlab.Gitlab('https://gitlab.com', private_token=G_TOKEN)
@@ -17,10 +11,12 @@ def push_gitlab(filename):
     file = open(filename, 'r', encoding='utf-8')
     data = file.read()
     action = 'create'
+
     for i in project.repository_tree():
         if i['name'] == filename:
             action = 'update'
             break
+
     payload = {
         'branch': 'main',
         'commit_message': 'Update',
@@ -32,7 +28,17 @@ def push_gitlab(filename):
             }
         ]
     }
+
     project.commits.create(payload)
+    file.close()
+
+
+def load_json(filename):
+    file = open(filename, 'wb')
+    try:
+        project.files.raw(file_path=filename, ref='main', streamed=True, action=file.write)
+    except gitlab.exceptions.GitlabGetError:
+        pass
     file.close()
 
 
@@ -41,13 +47,15 @@ def open_json(filename):
         with open(filename, 'r', encoding='utf-8') as file:
             data = dict(json.load(file))
     except json.decoder.JSONDecodeError:
-        data = dict()
+        data = {}
     return data
 
 
 def save_json(data, filename):
     with open(filename, 'w', encoding='utf-8') as file:
         json.dump(data, file, ensure_ascii=False)
+
+    push_gitlab(filename)
 
 
 def reformat_quote(text):

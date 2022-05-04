@@ -1,5 +1,4 @@
 schedule~=1.1.0
 pytelegrambotapi~=4.4.0
 python-gitlab~=3.3.0
-python-dotenv~=0.20.0
 Flask~=2.1.2
