@@ -8,6 +8,7 @@ import backend
 
 TOKEN = os.getenv('BOT_TOKEN')
 SECURITY_TOKEN = os.getenv('SERVER_TOKEN')
+POST_TIME = os.getenv('POST_TIME')
 CHANNEL_ID = '@letovo_quotes'
 MOD_ID = -1001791070494
 BAN_TIME = 3600
@@ -26,7 +27,7 @@ def format_time(raw):
 def publish_quote():
     queue = backend.open_json('queue.json')
 
-    if queue == {}:
+    if not queue:
         bot.send_message(MOD_ID, text='Цитаты в очереди закончились! :(')
         return
 
@@ -52,7 +53,7 @@ def suggest(message):
 
     author = message.from_user
     author_name = author.username
-    author_id = str(message.from_user.id)
+    author_id = str(author.id)
 
     if author_name is None:
         author_name = author.first_name + ' ' + author.last_name
@@ -64,8 +65,8 @@ def suggest(message):
 
         pending = backend.open_json('pending.json')
 
-        for i in pending.keys():
-            if backend.check_similarity(pending[i]['text'], quote) > 75:
+        for sent_quote in pending.values():
+            if backend.check_similarity(sent_quote['text'], quote) > 75:
                 bot.send_message(message.chat.id,
                                  'Подобная цитата уже отправлена в предложку! Флудить не стоит, ожидай ответа модерации :)')
                 return
@@ -85,11 +86,15 @@ def suggest(message):
             bot.send_message(message.chat.id, 'Принято! Отправил твою цитату в предложку :)')
 
             keyboard = telebot.types.InlineKeyboardMarkup()
-            keyboard.add(telebot.types.InlineKeyboardButton(text='🔔 Опубликовать', callback_data=f'publish: {call_count}'))
+            keyboard.add(
+                telebot.types.InlineKeyboardButton(text='🔔 Опубликовать', callback_data=f'publish: {call_count}'))
             keyboard.add(telebot.types.InlineKeyboardButton(text='🚫 Отменить', callback_data=f'reject: {call_count}'))
-            keyboard.add(telebot.types.InlineKeyboardButton(text='✎ Редактировать', callback_data=f'edit: {call_count}'))
+            keyboard.add(
+                telebot.types.InlineKeyboardButton(text='✎ Редактировать', callback_data=f'edit: {call_count}'))
 
-            sent_quote = bot.send_message(MOD_ID, f'Пользователь @{author_name} [ID: {author_id}] предложил следующую цитату:\n\n{quote}', reply_markup=keyboard)
+            sent_quote = bot.send_message(MOD_ID,
+                                          f'Пользователь @{author_name} [ID: {author_id}] предложил следующую цитату:\n\n{quote}',
+                                          reply_markup=keyboard)
             bot.pin_chat_message(MOD_ID, sent_quote.message_id)
 
             pending.update({call_count: {'text': quote, 'message_id': sent_quote.message_id, 'author_id': author_id}})
@@ -184,7 +189,7 @@ def get_queue(message):
     if message.chat.id == MOD_ID:
         queue = backend.open_json('queue.json')
 
-        if queue == {}:
+        if not queue:
             bot.send_message(MOD_ID, 'Очередь публикации пуста!')
             return
 
@@ -199,7 +204,7 @@ def get_banlist(message):
     if message.chat.id == MOD_ID:
         banlist = backend.open_json('banlist.json')
 
-        if banlist == {}:
+        if not banlist:
             bot.send_message(MOD_ID, 'Список заблокированных пользователей пуст!')
             return
 
@@ -241,8 +246,8 @@ def del_queue(message):
 def clear_queue(message):
     if message.chat.id == MOD_ID:
         keyboard = telebot.types.InlineKeyboardMarkup()
-        keyboard.add(telebot.types.InlineKeyboardButton(text='➕ Да', callback_data=f'clear: yes'))
-        keyboard.add(telebot.types.InlineKeyboardButton(text='➖ Нет', callback_data=f'clear: no'))
+        keyboard.add(telebot.types.InlineKeyboardButton(text='➕ Да', callback_data='clear: yes'))
+        keyboard.add(telebot.types.InlineKeyboardButton(text='➖ Нет', callback_data='clear: no'))
 
         bot.send_message(MOD_ID, 'Вы уверены в том, что хотите очистить очередь публикаций?', reply_markup=keyboard)
     else:
@@ -299,16 +304,19 @@ def button_handler(call):
 
             backend.save_json(queue, 'queue.json')
 
-            bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID, call.message.id, reply_markup=None)
+            bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID,
+                                  call.message.id, reply_markup=None)
             bot.send_message(author_id, 'Ваша цитата отправлена в очередь на публикацию!')
         elif action[0] == 'reject':
-            bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID, call.message.id, reply_markup=None)
+            bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
+                                  call.message.id, reply_markup=None)
             bot.send_message(author_id, 'Ваша цитата была отклонена :(')
         elif action[0] == 'edit':
             bot.send_message(MOD_ID, 'Текст для редактирования:')
             bot.send_message(MOD_ID, quote)
 
-            bot.edit_message_text(f'{call.message.text}\n\nОтредактировано модератором @{call.from_user.username}', MOD_ID, call.message.id, reply_markup=None)
+            bot.edit_message_text(f'{call.message.text}\n\nОтредактировано модератором @{call.from_user.username}',
+                                  MOD_ID, call.message.id, reply_markup=None)
             bot.send_message(author_id, 'Ваша цитата будет отредактирована и добавлена в очередь на публикацию!')
 
         bot.unpin_chat_message(MOD_ID, pending[actual_quote_id]['message_id'])
@@ -322,7 +330,8 @@ def button_handler(call):
 
             bot.edit_message_text('Успешно очистил очередь публикаций!', MOD_ID, call.message.id, reply_markup=None)
         elif call.data == 'clear: no':
-            bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID, call.message.id, reply_markup=None)
+            bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID, call.message.id,
+                                  reply_markup=None)
 
     bot.answer_callback_query(call.id)
 
@@ -350,8 +359,8 @@ if __name__ == '__main__':
         bot.remove_webhook()
         Thread(target=bot.polling, args=()).start()
 
-schedule.every().day.at('09:00').do(publish_quote)
-schedule.every().day.at('15:00').do(publish_quote)
+for data in POST_TIME:
+    schedule.every().day.at(data).do(publish_quote)
 
 while True:
     schedule.run_pending()

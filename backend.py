@@ -37,9 +37,8 @@ def load_json(filename):
     file = open(filename, 'wb')
     try:
         project.files.raw(file_path=filename, ref='main', streamed=True, action=file.write)
-    except gitlab.exceptions.GitlabGetError:
-        pass
-    file.close()
+    finally:
+        file.close()
 
 
 def open_json(filename):
