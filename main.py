@@ -8,7 +8,7 @@ import backend
 
 TOKEN = os.getenv('BOT_TOKEN')
 SECURITY_TOKEN = os.getenv('SERVER_TOKEN')
-POST_TIME = os.getenv('POST_TIME')
+POST_TIME = os.getenv('POST_TIME').split()
 CHANNEL_ID = '@letovo_quotes'
 MOD_ID = -1001791070494
 BAN_TIME = 3600
