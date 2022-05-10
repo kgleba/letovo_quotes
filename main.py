@@ -173,9 +173,8 @@ def add_queue(message):
 
         queue = backend.open_json('queue.json')
 
-        next_quote_id = len(queue.keys())
         quote = message.text[7:]
-        queue.update({str(next_quote_id): quote})
+        queue.update({str(len(queue.keys())): quote})
 
         bot.send_message(MOD_ID, 'Успешно занес цитату в очередь публикации!')
 
@@ -315,7 +314,11 @@ def button_handler(call):
                                   call.message.id, reply_markup=None)
             bot.send_message(author_id, 'Ваша цитата была отклонена :(')
 
-            rejected.update({str(max(map(int, rejected.keys())) + 1): call.message.text})
+            if rejected != {}:
+                rejected.update({str(max(map(int, rejected.keys())) + 1): call.message.text})
+            else:
+                rejected.update({'0': call.message.text})
+
             backend.save_json(rejected, 'rejected.json')
 
         elif action[0] == 'edit':
