@@ -7,8 +7,7 @@ from flask import Flask, request
 import backend
 
 TOKEN = os.getenv('BOT_TOKEN')
-SECURITY_TOKEN = os.getenv('SERVER_TOKEN')
-POST_TIME = os.getenv('POST_TIME').split()
+POST_TIME = os.getenv('POST_TIME')
 CHANNEL_ID = '@letovo_quotes'
 MOD_ID = -1001791070494
 BAN_TIME = 3600
@@ -18,6 +17,7 @@ bot = telebot.TeleBot(TOKEN)
 backend.load_json('queue.json')
 backend.load_json('banlist.json')
 backend.load_json('pending.json')
+backend.load_json('rejected.json')
 
 
 def format_time(raw):
@@ -307,10 +307,17 @@ def button_handler(call):
             bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID,
                                   call.message.id, reply_markup=None)
             bot.send_message(author_id, 'Ваша цитата отправлена в очередь на публикацию!')
+
         elif action[0] == 'reject':
+            rejected = backend.open_json('rejected.json')
+
             bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
                                   call.message.id, reply_markup=None)
             bot.send_message(author_id, 'Ваша цитата была отклонена :(')
+
+            rejected.update({str(max(map(int, rejected.keys())) + 1): call.message.text})
+            backend.save_json(rejected, 'rejected.json')
+
         elif action[0] == 'edit':
             bot.send_message(MOD_ID, 'Текст для редактирования:')
             bot.send_message(MOD_ID, quote)
@@ -322,8 +329,8 @@ def button_handler(call):
         bot.unpin_chat_message(MOD_ID, pending[actual_quote_id]['message_id'])
 
         pending.pop(actual_quote_id)
-
         backend.save_json(pending, 'pending.json')
+
     else:
         if call.data == 'clear: yes':
             backend.save_json({}, 'queue.json')
@@ -341,7 +348,7 @@ if __name__ == '__main__':
         server = Flask('__main__')
 
 
-        @server.route(f'/bot{SECURITY_TOKEN}', methods=['POST'])
+        @server.route(f'/updates', methods=['POST'])
         def get_messages():
             bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode('utf-8'))])
             return '!', 200
@@ -350,7 +357,7 @@ if __name__ == '__main__':
         @server.route('/')
         def webhook():
             bot.remove_webhook()
-            bot.set_webhook(url=f'https://letovo-quotes.herokuapp.com/bot{SECURITY_TOKEN}')
+            bot.set_webhook(url=f'https://letovo-quotes.herokuapp.com/updates')
             return '?', 200
 
 
