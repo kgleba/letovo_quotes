@@ -282,16 +282,17 @@ def edit_quote(message):
 def button_handler(call):
     action = call.data.split(':')
 
-    pending = backend.open_json('pending.json')
-
     if action[0] in ['publish', 'reject', 'edit']:
+        pending = backend.open_json('pending.json')
+
         actual_quote_id = action[1].replace(' ', '')
-        quote = pending[actual_quote_id]['text']
 
         if actual_quote_id not in pending.keys():
             bot.reply_to(call.message,
                          'Возникла проблема с обработкой цитаты :( Если это необходимо, проведи ее вручную.')
             return
+
+        quote = pending[actual_quote_id]['text']
 
         author_id = pending[actual_quote_id]['author_id']
 
@@ -314,7 +315,7 @@ def button_handler(call):
                                   call.message.id, reply_markup=None)
             bot.send_message(author_id, 'Ваша цитата была отклонена :(')
 
-            if rejected != {}:
+            if rejected:
                 rejected.update({str(max(map(int, rejected.keys())) + 1): call.message.text})
             else:
                 rejected.update({'0': call.message.text})
