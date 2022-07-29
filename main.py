@@ -13,6 +13,7 @@ MOD_ID = -1001791070494
 BAN_TIME = 3600
 
 bot = telebot.TeleBot(TOKEN)
+waiting_for_suggest = {}
 
 backend.load_json('queue.json')
 backend.load_json('banlist.json')
@@ -40,8 +41,65 @@ def publish_quote():
     backend.save_json(queue, 'queue.json')
 
 
+def handle_quote(message, quote):
+    author = message.from_user
+    author_name = author.username
+    author_id = str(author.id)
+
+    if author_name is None:
+        author_name = author.first_name + ' ' + author.last_name
+
+    if quote.find('#') == -1:
+        bot.send_message(message.chat.id, 'Цитата должна содержать хештег!')
+        return
+
+    if len(quote) > 500:
+        bot.send_message(message.chat.id, 'Отправленная цитата слишком большая!')
+        return
+
+    pending = backend.open_json('pending.json')
+
+    for sent_quote in pending.values():
+        if backend.check_similarity(sent_quote['text'], quote) > 75:
+            bot.send_message(message.chat.id,
+                             'Подобная цитата уже отправлена в предложку! Флудить не стоит, ожидай ответа модерации :)')
+            return
+
+    banlist = backend.open_json('banlist.json')
+
+    if author_id in banlist.keys() and int(time.time()) > banlist[author_id]:
+        banlist.pop(author_id)
+        backend.save_json(banlist, 'banlist.json')
+
+    if author_id not in banlist.keys():
+        bot.send_message(message.chat.id, 'Принято! Отправил твою цитату в предложку :)')
+
+        if pending.keys():
+            call_count = max(map(int, pending.keys())) + 1
+        else:
+            call_count = 0
+
+        keyboard = telebot.types.InlineKeyboardMarkup()
+        keyboard.add(telebot.types.InlineKeyboardButton(text='🔔 Опубликовать', callback_data=f'publish: {call_count}'))
+        keyboard.add(telebot.types.InlineKeyboardButton(text='🚫 Отменить', callback_data=f'reject: {call_count}'))
+        keyboard.add(telebot.types.InlineKeyboardButton(text='✎ Редактировать', callback_data=f'edit: {call_count}'))
+
+        sent_quote = bot.send_message(MOD_ID,
+                                      f'Пользователь @{author_name} [ID: {author_id}] предложил следующую цитату:\n\n{quote}',
+                                      reply_markup=keyboard)
+        bot.pin_chat_message(MOD_ID, sent_quote.message_id)
+
+        pending.update({call_count: {'text': quote, 'message_id': sent_quote.message_id, 'author_id': author_id}})
+
+        backend.save_json(pending, 'pending.json')
+    else:
+        bot.send_message(message.chat.id,
+                         f'Вы были заблокированы, поэтому не можете предлагать цитаты. Оставшееся время блокировки: {format_time(banlist[author_id] - int(time.time()))}')
+        return
+
+
 @bot.message_handler(commands=['start'])
-def hello(message):
+def greetings(message):
     bot.send_message(message.chat.id,
                      'Привет! Сюда ты можешь предлагать цитаты для публикации в канале "Забавные цитаты Летово". Если ты вдруг еще не подписан - держи ссылку: '
                      'https://t.me/letovo_quotes. Никаких ограничений - предлагай все, что покажется тебе смешным (с помощью команды /suggest), главное, укажи автора цитаты :)')
@@ -51,62 +109,33 @@ def hello(message):
 def suggest(message):
     quote = backend.reformat_quote(message.text[9:])
 
-    author = message.from_user
-    author_name = author.username
-    author_id = str(author.id)
-
-    if author_name is None:
-        author_name = author.first_name + ' ' + author.last_name
-
     if quote:
-        if len(quote) > 500:
-            bot.send_message(message.chat.id, 'Отправленная цитата слишком большая!')
-            return
-
-        pending = backend.open_json('pending.json')
-
-        for sent_quote in pending.values():
-            if backend.check_similarity(sent_quote['text'], quote) > 75:
-                bot.send_message(message.chat.id,
-                                 'Подобная цитата уже отправлена в предложку! Флудить не стоит, ожидай ответа модерации :)')
-                return
-
-        banlist = backend.open_json('banlist.json')
-
-        if author_id in banlist.keys() and int(time.time()) > banlist[author_id]:
-            banlist.pop(author_id)
-            backend.save_json(banlist, 'banlist.json')
-
-        if author_id not in banlist.keys():
-            if pending.keys():
-                call_count = max(map(int, pending.keys())) + 1
-            else:
-                call_count = 0
-
-            bot.send_message(message.chat.id, 'Принято! Отправил твою цитату в предложку :)')
-
-            keyboard = telebot.types.InlineKeyboardMarkup()
-            keyboard.add(
-                telebot.types.InlineKeyboardButton(text='🔔 Опубликовать', callback_data=f'publish: {call_count}'))
-            keyboard.add(telebot.types.InlineKeyboardButton(text='🚫 Отменить', callback_data=f'reject: {call_count}'))
-            keyboard.add(
-                telebot.types.InlineKeyboardButton(text='✎ Редактировать', callback_data=f'edit: {call_count}'))
-
-            sent_quote = bot.send_message(MOD_ID,
-                                          f'Пользователь @{author_name} [ID: {author_id}] предложил следующую цитату:\n\n{quote}',
-                                          reply_markup=keyboard)
-            bot.pin_chat_message(MOD_ID, sent_quote.message_id)
-
-            pending.update({call_count: {'text': quote, 'message_id': sent_quote.message_id, 'author_id': author_id}})
-
-            backend.save_json(pending, 'pending.json')
-        else:
-            bot.send_message(message.chat.id,
-                             f'Вы были заблокированы, поэтому не можете предлагать цитаты. Оставшееся время блокировки: {format_time(banlist[author_id] - int(time.time()))}')
+        handle_quote(message, quote)
     else:
         bot.send_message(message.chat.id,
                          'Эта команда используется для отправки цитат в предложку. Все, что тебе нужно сделать - ввести текст после команды /suggest и ждать публикации. '
                          'И, пожалуйста, не пиши ерунду!')
+        waiting_for_suggest[message.from_user.id] = True
+
+
+@bot.message_handler(commands=['suggest_rollback'])
+def suggest_rollback(message):
+    pending = backend.open_json('pending.json')
+
+    for counter, sent_quote in reversed(pending.items()):
+        if sent_quote['author_id'] == str(message.from_user.id):
+            pending.pop(str(counter))
+            quote_text = sent_quote['text']
+            quote_id = sent_quote['message_id']
+
+            bot.edit_message_text(f'{quote_text}\n\nПредложенная цитата была отклонена автором.', MOD_ID,
+                                  quote_id, reply_markup=None)
+            bot.unpin_chat_message(MOD_ID, quote_id)
+            bot.send_message(message.chat.id, 'Успешно откатил вашу последнюю предложенную цитату!')
+
+            backend.save_json(pending, 'pending.json')
+
+            return
 
 
 @bot.message_handler(commands=['ban'])
@@ -215,8 +244,8 @@ def get_banlist(message):
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
 
-@bot.message_handler(commands=['del_queue'])
-def del_queue(message):
+@bot.message_handler(commands=['del_quote'])
+def del_quote(message):
     if message.chat.id == MOD_ID:
         if len(message.text) == 10:
             bot.send_message(message.chat.id, 'Эта команда должна содержать какой-то параметр!')
@@ -276,6 +305,14 @@ def edit_quote(message):
             return
     else:
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+
+
+@bot.message_handler(content_types=['text'])
+def text_handler(message):
+    author_id = message.from_user.id
+    if waiting_for_suggest.get(author_id, False) and waiting_for_suggest[author_id]:
+        handle_quote(message, message.text)
+        waiting_for_suggest[author_id] = False
 
 
 @bot.callback_query_handler(func=lambda call: True)

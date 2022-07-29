@@ -1,6 +1,8 @@
 import os
 import json
+import difflib
 import gitlab
+
 G_TOKEN = os.getenv('GITLAB_PAT')
 
 gl = gitlab.Gitlab('https://gitlab.com', private_token=G_TOKEN)
@@ -80,15 +82,4 @@ def reformat_quote(text):
 
 
 def check_similarity(text_1: str, text_2: str):
-    longest_substring = ''
-    for i in range(len(text_1) + 1):
-        substring = ''
-        for j in range(len(text_2) + 1):
-            if i + j < len(text_1) and i + j < len(text_2):
-                if text_1[i + j] == text_2[j]:
-                    substring += text_2[j]
-            else:
-                if len(substring) > len(longest_substring):
-                    longest_substring = substring
-                substring = ''
-    return len(longest_substring) / max(len(text_1), len(text_2)) * 100
+    return difflib.SequenceMatcher(lambda symbol: symbol in [' ', '\n', '\t'], text_1, text_2).ratio() * 100
