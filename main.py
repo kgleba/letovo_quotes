@@ -120,16 +120,16 @@ def suggest(message):
 
 @bot.message_handler(commands=['help'])
 def bot_help(message):
-    user_help = '*Пользовательские команды:*\n/start – запуск бота\n/help – вызов этого сообщения\n' \
+    user_help = '<b>Пользовательские команды:</b>\n/start – запуск бота\n/help – вызов этого сообщения\n' \
                 '/suggest – предложить цитату\n/suggest_rollback – откатить последнюю предложенную цитату'
-    admin_help = '*Администраторские команды:*\n/ban [id] [duration in sec, 3600 by default] – блокировка пользователя\n/unban [id] - разблокировка пользователя\n' \
+    admin_help = '<b>Админские команды:</b>\n/ban [id] [duration in sec, 3600 by default] – блокировка пользователя\n/unban [id] - разблокировка пользователя\n' \
                  '/get_banlist – список заблокированных в данный момент пользователей\n/get_queue – текущая очередь цитат на публикацию\n' \
                  '/queue [text] – добавление цитаты в очередь\n/clear_queue – очистка очереди на публикацию\n' \
                  '/edit_quote [id]; [text] – изменение цитаты с заданным номером\n/del_quote [id] – удаление цитаты с заданным номером'
 
-    bot.send_message(message.chat.id, user_help, parse_mode='Markdown')
+    bot.send_message(message.chat.id, user_help, parse_mode='HTML')
     if message.chat.id == MOD_ID:
-        bot.send_message(message.chat.id, admin_help, parse_mode='Markdown')
+        bot.send_message(message.chat.id, admin_help, parse_mode='HTML')
 
 
 @bot.message_handler(commands=['suggest_rollback'])
