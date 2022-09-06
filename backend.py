@@ -14,7 +14,7 @@ def push_gitlab(filename):
     data = file.read()
     action = 'create'
 
-    for i in project.repository_tree():
+    for i in project.repository_tree(branch='main'):
         if i['name'] == filename:
             action = 'update'
             break

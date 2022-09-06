@@ -19,6 +19,7 @@ backend.load_json('queue.json')
 backend.load_json('banlist.json')
 backend.load_json('pending.json')
 backend.load_json('rejected.json')
+backend.load_json('voting.json')
 
 
 def format_time(raw):
@@ -32,7 +33,10 @@ def publish_quote():
         bot.send_message(MOD_ID, text='Цитаты в очереди закончились! :(')
         return
 
-    bot.send_message(CHANNEL_ID, text=queue['0'])
+    keyboard = telebot.types.InlineKeyboardMarkup()
+    keyboard.add(telebot.types.InlineKeyboardButton(text='🔥 В топ', callback_data=f'upvote'))
+
+    bot.send_message(CHANNEL_ID, text=queue['0'], reply_markup=keyboard)
 
     for key in range(len(queue.keys()) - 1):
         queue[str(key)] = queue[str(int(key) + 1)]
@@ -394,6 +398,20 @@ def button_handler(call):
         elif call.data == 'clear: no':
             bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID, call.message.id,
                                   reply_markup=None)
+        elif call.data == 'upvote':
+            voting = backend.open_json('voting.json')
+            source_id = str(call.message.id)
+            user_id = call.from_user.id
+
+            if voting.get(source_id, None) is None:
+                voting[source_id] = []
+
+            if user_id not in voting[source_id]:
+                voting[source_id].append(user_id)
+            else:
+                bot.answer_callback_query(call.id, 'Ты уже проголосовал!')
+
+            backend.save_json(voting, 'voting.json')
 
     bot.answer_callback_query(call.id)
 
