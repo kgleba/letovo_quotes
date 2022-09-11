@@ -6,8 +6,8 @@ import telebot
 from flask import Flask, request
 import backend
 
-TOKEN = '5278622840:AAFfwoGWGG1-YAmeVVFsBCqnGzG-mvtDNg8'
-POST_TIME = ['09:00']
+TOKEN = os.getenv('BOT_TOKEN')
+POST_TIME = os.getenv('POST_TIME').split()
 CHANNEL_ID = '@letovo_quotes'
 CHANNEL_B_ID = '@letovo_b_quotes'
 MOD_ID = -1001791070494
@@ -41,7 +41,10 @@ def publish_quote(queue_b=False):
     keyboard = telebot.types.InlineKeyboardMarkup()
     keyboard.add(telebot.types.InlineKeyboardButton(text='🔥 В топ', callback_data=f'upvote'))
 
-    bot.send_message(CHANNEL_ID, text=queue['0'], reply_markup=keyboard)
+    if not queue_b:
+        bot.send_message(CHANNEL_ID, text=queue['0'], reply_markup=keyboard)
+    else:
+        bot.send_message(CHANNEL_B_ID, text=queue['0'])
 
     for key in range(len(queue.keys()) - 1):
         queue[str(key)] = queue[str(int(key) + 1)]
