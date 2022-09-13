@@ -116,7 +116,7 @@ def handle_quote(message, quote):
 
 @bot.message_handler(commands=['instant_publish'])
 def instant_publish(message):
-    if message.from_user.id == 1920379812:
+    if message.chat.id == MOD_ID:
         if len(message.text) == 16:
             bot.send_message(message.chat.id, 'Эта команда должна содержать аргумент!')
             return
@@ -156,8 +156,8 @@ def bot_help(message):
                 '/suggest – предложить цитату\n/suggest_rollback – откатить последнюю предложенную цитату'
     admin_help = '<b>Админские команды:</b>\n/ban [id] [duration in sec, 3600 by default] – блокировка пользователя\n/unban [id] - разблокировка пользователя\n' \
                  '/get_banlist – список заблокированных в данный момент пользователей\n/get_queue – текущая очередь цитат на публикацию\n' \
-                 '/queue [text] – добавление цитаты в очередь\n/clear_queue – очистка очереди на публикацию\n' \
-                 '/edit_quote [id]; [text] – изменение цитаты с заданным номером\n/del_quote [id] – удаление цитаты с заданным номером'
+                 '/push_queue [text] – добавление цитаты в очередь\n/clear_queue – очистка очереди на публикацию\n' \
+                 '/edit_queue [id]; [text] – изменение цитаты с заданным номером\n/delete_queue [id] – удаление цитаты с заданным номером'
 
     bot.send_message(message.chat.id, user_help, parse_mode='HTML')
     if message.chat.id == MOD_ID:
@@ -239,7 +239,7 @@ def unban(message):
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
 
-@bot.message_handler(commands=['queue'])
+@bot.message_handler(commands=['push_queue'])
 def add_queue(message):
     if message.chat.id == MOD_ID:
         args = message.text[7:].split('; ')
@@ -313,7 +313,7 @@ def get_banlist(message):
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
 
-@bot.message_handler(commands=['del_quote'])
+@bot.message_handler(commands=['delete_queue'])
 def del_quote(message):
     if message.chat.id == MOD_ID:
         args = message.text[11:].split('; ')
@@ -364,7 +364,7 @@ def clear_queue(message):
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
 
-@bot.message_handler(commands=['edit_quote'])
+@bot.message_handler(commands=['edit_queue'])
 def edit_quote(message):
     if message.chat.id == MOD_ID:
         args = message.text[12:].split('; ')
