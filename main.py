@@ -5,6 +5,7 @@ import schedule
 import telebot
 from flask import Flask, request
 import backend
+from functools import partial
 
 TOKEN = os.getenv('BOT_TOKEN')
 POST_TIME = os.getenv('POST_TIME').split()
@@ -529,7 +530,7 @@ if __name__ == '__main__':
 
 for data in POST_TIME:
     schedule.every().day.at(data).do(publish_quote)
-    schedule.every().day.at(data).do(lambda: publish_quote(True))
+    schedule.every().day.at(data).do(partial(publish_quote, True))
 
 while True:
     schedule.run_pending()
