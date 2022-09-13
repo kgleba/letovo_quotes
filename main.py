@@ -9,6 +9,7 @@ from functools import partial
 
 TOKEN = os.getenv('BOT_TOKEN')
 POST_TIME = os.getenv('POST_TIME').split()
+POST_TIME_B = os.getenv('POST_TIME_B').split()
 CHANNEL_ID = '@letovo_quotes'
 CHANNEL_B_ID = '@letovo_b_quotes'
 MOD_ID = -1001791070494
@@ -530,6 +531,8 @@ if __name__ == '__main__':
 
 for data in POST_TIME:
     schedule.every().day.at(data).do(publish_quote)
+    
+for data in POST_TIME_B:
     schedule.every().day.at(data).do(partial(publish_quote, True))
 
 while True:
