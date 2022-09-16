@@ -1,11 +1,11 @@
 import os
 import time
 from threading import Thread
+from functools import partial
 import schedule
 import telebot
 from flask import Flask, request
 import backend
-from functools import partial
 
 TOKEN = os.getenv('BOT_TOKEN')
 POST_TIME = os.getenv('POST_TIME').split()
@@ -23,7 +23,6 @@ backend.load_json('queue_b.json')
 backend.load_json('banlist.json')
 backend.load_json('pending.json')
 backend.load_json('rejected.json')
-backend.load_json('voting.json')
 
 
 def format_time(raw):
@@ -40,13 +39,10 @@ def publish_quote(queue_b=False):
         bot.send_message(MOD_ID, text=f'Цитаты в очереди {"B" if queue_b else "A"} закончились! :(')
         return
 
-    keyboard = telebot.types.InlineKeyboardMarkup()
-    keyboard.add(telebot.types.InlineKeyboardButton(text='🔥 В топ', callback_data=f'upvote'))
-
-    if not queue_b:
-        bot.send_message(CHANNEL_ID, text=queue['0'], reply_markup=keyboard)
-    else:
+    if queue_b:
         bot.send_message(CHANNEL_B_ID, text=queue['0'])
+    else:
+        bot.send_message(CHANNEL_ID, text=queue['0'])
 
     for key in range(len(queue.keys()) - 1):
         queue[str(key)] = queue[str(int(key) + 1)]
@@ -107,7 +103,8 @@ def handle_quote(message, quote):
                                       reply_markup=keyboard)
         bot.pin_chat_message(MOD_ID, sent_quote.message_id)
 
-        pending.update({call_count: {'text': quote, 'message_id': sent_quote.message_id, 'author_id': author_id}})
+        pending.update({call_count: {'text': quote, 'message_id': sent_quote.message_id, 'author_id': author_id,
+                                     'source': [message.chat.id, message.id]}})
 
         backend.save_json(pending, 'pending.json')
     else:
@@ -123,10 +120,7 @@ def instant_publish(message):
             bot.send_message(message.chat.id, 'Эта команда должна содержать аргумент!')
             return
 
-        keyboard = telebot.types.InlineKeyboardMarkup()
-        keyboard.add(telebot.types.InlineKeyboardButton(text='🔥 В топ', callback_data=f'upvote'))
-
-        bot.send_message(CHANNEL_ID, message, reply_markup=keyboard)
+        bot.send_message(CHANNEL_ID, message)
 
     else:
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
@@ -338,7 +332,7 @@ def del_quote(message):
                 return
 
             for key in range(int(quote_id), len(queue.keys()) - 1):
-                queue[str(key)] = queue[str(int(key) + 1)]
+                queue[str(key)] = queue[str(key + 1)]
             queue.pop(str(len(queue.keys()) - 1))
 
             bot.send_message(MOD_ID, f'Успешно удалил цитату с номером {quote_id}!')
@@ -403,6 +397,116 @@ def edit_quote(message):
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
 
+@bot.message_handler(commands=['move_quote'])
+def move_quote(message):
+    if message.chat.id == MOD_ID:
+        args = message.text[12:].split('; ')
+
+        if len(args) == 2:
+            if args[0] == 'b':
+                queue_b = True
+            else:
+                queue_b = False
+
+            b, quote_id = args
+
+            if queue_b:
+                queue = backend.open_json('queue_b.json')
+            else:
+                queue = backend.open_json('queue.json')
+
+            if quote_id in queue.keys():
+                quote = queue[quote_id]
+                message.text = f'/del_quote {b}; {quote_id}'
+                del_quote(message)
+                message.text = f'/queue {"a" if b == "b" else "b"}; {quote}'
+                add_queue(message)
+            else:
+                bot.send_message(MOD_ID, 'Цитаты с таким номером не существует!')
+                return
+
+            bot.send_message(MOD_ID, f'Успешно переместил в другую очередь цитату под номером {quote_id}!')
+        else:
+            bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
+            return
+    else:
+        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+
+
+@bot.message_handler(commands=['swap_queue'])
+def swap_queue(message):
+    if message.chat.id == MOD_ID:
+        args = message.text[12:].split('; ')
+
+        if len(args) == 3:
+            if args[0] == 'b':
+                queue_b = True
+            else:
+                queue_b = False
+
+            if queue_b:
+                queue = backend.open_json('queue_b.json')
+            else:
+                queue = backend.open_json('queue.json')
+
+            if args[1] in queue.keys() and args[2] in queue.keys():
+                queue[args[1]], queue[args[2]] = queue[args[2]], queue[args[1]]
+                bot.send_message(MOD_ID, 'Успешно поменял цитаты местами в очереди!')
+            else:
+                bot.send_message(MOD_ID, 'Цитаты с таким номером не существует!')
+                return
+
+            if queue_b:
+                backend.save_json(queue, 'queue_b.json')
+            else:
+                backend.save_json(queue, 'queue.json')
+        else:
+            bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
+            return
+    else:
+        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+
+
+@bot.message_handler(commands=['insert_quote'])
+def insert_quote(message):
+    if message.chat.id == MOD_ID:
+        args = message.text[14:].split('; ')
+
+        if len(args) == 3:
+            if args[0] == 'b':
+                queue_b = True
+            else:
+                queue_b = False
+
+            if queue_b:
+                queue = backend.open_json('queue_b.json')
+            else:
+                queue = backend.open_json('queue.json')
+
+            if args[1] in queue.keys():
+                current_quote = queue[args[1]]
+                for key in range(int(args[1]) + 1, len(queue.keys()) + 1):
+                    next_quote = queue.get(str(key))
+                    queue[str(key)] = current_quote
+                    current_quote = next_quote
+
+                queue[args[1]] = args[2]
+
+                bot.send_message(MOD_ID, 'Успешно вставил цитату в очередь!')
+            else:
+                bot.send_message(message.chat.id, 'Вставлять дальше, чем в конец очереди нельзя!')
+
+            if queue_b:
+                backend.save_json(queue, 'queue_b.json')
+            else:
+                backend.save_json(queue, 'queue.json')
+        else:
+            bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
+            return
+    else:
+        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+
+
 @bot.message_handler(content_types=['text'])
 def text_handler(message):
     author_id = message.from_user.id
@@ -426,8 +530,8 @@ def button_handler(call):
             return
 
         quote = pending[actual_quote_id]['text']
-
-        author_id = pending[actual_quote_id]['author_id']
+        author_id = pending[actual_quote_id]['source'][0]
+        source_id = pending[actual_quote_id]['source'][1]
 
         if action[0] == 'publish':
             queue = backend.open_json('queue.json')
@@ -439,7 +543,7 @@ def button_handler(call):
 
             bot.edit_message_text(f'{call.message.text}\n\nОпубликовано модератором @{call.from_user.username}', MOD_ID,
                                   call.message.id, reply_markup=None)
-            bot.send_message(author_id, 'Ваша цитата отправлена в очередь на публикацию!')
+            bot.send_message(author_id, 'Ваша цитата отправлена в очередь на публикацию!', reply_to_message_id=source_id)
 
         elif action[0] == 'publish_b':
             queue_b = backend.open_json('queue_b.json')
@@ -451,14 +555,14 @@ def button_handler(call):
 
             bot.edit_message_text(f'{call.message.text}\n\nОтправлено в жмых модератором @{call.from_user.username}', MOD_ID,
                                   call.message.id, reply_markup=None)
-            bot.send_message(author_id, 'Ваша цитата отправлена в очередь в жмых!')
+            bot.send_message(author_id, 'Ваша цитата отправлена в очередь в жмых!', reply_to_message_id=source_id)
 
         elif action[0] == 'reject':
             rejected = backend.open_json('rejected.json')
 
             bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', MOD_ID,
                                   call.message.id, reply_markup=None)
-            bot.send_message(author_id, 'Ваша цитата была отклонена :(')
+            bot.send_message(author_id, 'Ваша цитата была отклонена :(', reply_to_message_id=source_id)
 
             if rejected:
                 rejected.update({str(max(map(int, rejected.keys())) + 1): call.message.text})
@@ -473,7 +577,8 @@ def button_handler(call):
 
             bot.edit_message_text(f'{call.message.text}\n\nОтредактировано модератором @{call.from_user.username}',
                                   MOD_ID, call.message.id, reply_markup=None)
-            bot.send_message(author_id, 'Ваша цитата будет отредактирована и добавлена в очередь на публикацию!')
+            bot.send_message(author_id, 'Ваша цитата будет отредактирована и добавлена в очередь на публикацию!',
+                             reply_to_message_id=source_id)
 
         bot.unpin_chat_message(MOD_ID, pending[actual_quote_id]['message_id'])
 
@@ -488,20 +593,6 @@ def button_handler(call):
         elif call.data == 'clear: no':
             bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID, call.message.id,
                                   reply_markup=None)
-        elif call.data == 'upvote':
-            voting = backend.open_json('voting.json')
-            source_id = str(call.message.id)
-            user_id = call.from_user.id
-
-            if voting.get(source_id, None) is None:
-                voting[source_id] = []
-
-            if user_id not in voting[source_id]:
-                voting[source_id].append(user_id)
-            else:
-                bot.answer_callback_query(call.id, 'Ты уже проголосовал!')
-
-            backend.save_json(voting, 'voting.json')
 
     bot.answer_callback_query(call.id)
 
@@ -531,7 +622,7 @@ if __name__ == '__main__':
 
 for data in POST_TIME:
     schedule.every().day.at(data).do(publish_quote)
-    
+
 for data in POST_TIME_B:
     schedule.every().day.at(data).do(partial(publish_quote, True))
 
