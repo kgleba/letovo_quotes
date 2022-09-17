@@ -1,4 +1,4 @@
 schedule~=1.1.0
-pytelegrambotapi~=4.4.0
-python-gitlab~=3.3.0
-Flask~=2.1.2
+pytelegrambotapi~=4.7.0
+python-gitlab~=3.9.0
+Flask~=2.2.2
