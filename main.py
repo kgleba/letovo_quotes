@@ -113,19 +113,6 @@ def handle_quote(message, quote):
         return
 
 
-@bot.message_handler(commands=['instant_publish'])
-def instant_publish(message):
-    if message.from_user.id == 1920379812:
-        if len(message.text) == 16:
-            bot.send_message(message.chat.id, 'Эта команда должна содержать аргумент!')
-            return
-
-        bot.send_message(CHANNEL_ID, message)
-
-    else:
-        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
-
-
 @bot.message_handler(commands=['start'])
 def greetings(message):
     bot.send_message(message.chat.id,
@@ -151,9 +138,11 @@ def bot_help(message):
     user_help = '<b>Пользовательские команды:</b>\n/start – запуск бота\n/help – вызов этого сообщения\n' \
                 '/suggest – предложить цитату\n/suggest_rollback – откатить последнюю предложенную цитату'
     admin_help = '<b>Админские команды:</b>\n/ban [id] [duration in sec, 3600 by default] – блокировка пользователя\n/unban [id] - разблокировка пользователя\n' \
-                 '/get_banlist – список заблокированных в данный момент пользователей\n/get_queue – текущая очередь цитат на публикацию\n' \
-                 '/queue [text] – добавление цитаты в очередь\n/clear_queue – очистка очереди на публикацию\n' \
-                 '/edit_quote [id]; [text] – изменение цитаты с заданным номером\n/del_quote [id] – удаление цитаты с заданным номером'
+                 '/get_banlist – список заблокированных в данный момент пользователей\n/get_queue [q, a by default] – текущая очередь цитат на публикацию\n' \
+                 '/queue [q]; [text] – добавление цитаты в очередь\n/clear_queue – очистка очереди на публикацию\n' \
+                 '/edit_quote [q]; [id]; [text] – изменение цитаты с заданным номером\n/del_quote [id] – удаление цитаты с заданным номером\n' \
+                 '/move_quote [q]; [id] - переместить цитату из текущей очереди в конец другой\n/swap_queue [q]; [id1]; [id2] - поменять местами две цитаты\n' \
+                 '/insert_quote [q]; [id] - вставить цитату в заданное место в очереди'
 
     bot.send_message(message.chat.id, user_help, parse_mode='HTML')
     if message.chat.id == MOD_ID:
@@ -419,7 +408,7 @@ def move_quote(message):
                 quote = queue[quote_id]
                 message.text = f'/del_quote {b}; {quote_id}'
                 del_quote(message)
-                message.text = f'/queue {"a" if b == "b" else "b"}; {quote}'
+                message.text = f'/queue {"b" if queue_b else "a"}; {quote}'
                 add_queue(message)
             else:
                 bot.send_message(MOD_ID, 'Цитаты с таким номером не существует!')
