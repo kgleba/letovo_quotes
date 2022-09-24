@@ -227,7 +227,7 @@ def unban(message):
 @bot.message_handler(commands=['push'])
 def add_queue(message):
     if message.chat.id == MOD_ID:
-        args = message.text[7:].split('; ')
+        args = message.text[5:].split('; ')
 
         if len(args) == 2:
             if args[0] == 'b':
@@ -259,7 +259,7 @@ def add_queue(message):
 @bot.message_handler(commands=['get'])
 def get_queue(message):
     if message.chat.id == MOD_ID:
-        args = message.text[11:]
+        args = message.text[4:]
 
         if args == 'b':
             queue_b = True
@@ -301,7 +301,7 @@ def get_banlist(message):
 @bot.message_handler(commands=['delete'])
 def del_quote(message):
     if message.chat.id == MOD_ID:
-        args = message.text[11:].split('; ')
+        args = message.text[7:].split('; ')
 
         if len(args) == 2:
             if args[0] == 'b':
@@ -352,7 +352,7 @@ def clear_queue(message):
 @bot.message_handler(commands=['edit'])
 def edit_quote(message):
     if message.chat.id == MOD_ID:
-        args = message.text[12:].split('; ')
+        args = message.text[5:].split('; ')
 
         if len(args) == 3:
             if args[0] == 'b':
@@ -389,7 +389,7 @@ def edit_quote(message):
 @bot.message_handler(commands=['move'])
 def move_quote(message):
     if message.chat.id == MOD_ID:
-        args = message.text[12:].split('; ')
+        args = message.text[5:].split('; ')
 
         if len(args) == 2:
             if args[0] == 'b':
@@ -425,7 +425,7 @@ def move_quote(message):
 @bot.message_handler(commands=['swap'])
 def swap_queue(message):
     if message.chat.id == MOD_ID:
-        args = message.text[12:].split('; ')
+        args = message.text[5:].split('; ')
 
         if len(args) == 3:
             if args[0] == 'b':
@@ -459,7 +459,7 @@ def swap_queue(message):
 @bot.message_handler(commands=['insert'])
 def insert_quote(message):
     if message.chat.id == MOD_ID:
-        args = message.text[14:].split('; ')
+        args = message.text[7:].split('; ')
 
         if len(args) == 3:
             if args[0] == 'b':
