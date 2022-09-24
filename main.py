@@ -138,11 +138,11 @@ def bot_help(message):
     user_help = '<b>Пользовательские команды:</b>\n/start – запуск бота\n/help – вызов этого сообщения\n' \
                 '/suggest – предложить цитату\n/suggest_rollback – откатить последнюю предложенную цитату'
     admin_help = '<b>Админские команды:</b>\n/ban [id] [duration in sec, 3600 by default] – блокировка пользователя\n/unban [id] - разблокировка пользователя\n' \
-                 '/get_banlist – список заблокированных в данный момент пользователей\n/get_queue [q, a by default] – текущая очередь цитат на публикацию\n' \
-                 '/queue [q]; [text] – добавление цитаты в очередь\n/clear_queue – очистка очереди на публикацию\n' \
-                 '/edit_quote [q]; [id]; [text] – изменение цитаты с заданным номером\n/del_quote [id] – удаление цитаты с заданным номером\n' \
-                 '/move_quote [q]; [id] - переместить цитату из текущей очереди в конец другой\n/swap_queue [q]; [id1]; [id2] - поменять местами две цитаты\n' \
-                 '/insert_quote [q]; [id] - вставить цитату в заданное место в очереди'
+                 '/get_banlist – список заблокированных в данный момент пользователей\n/get [q, a by default] – текущая очередь цитат на публикацию\n' \
+                 '/push [q]; [text] – добавление цитаты в очередь\n/clear – очистка очереди на публикацию\n' \
+                 '/edit [q]; [id]; [text] – изменение цитаты с заданным номером\n/delete [q]; [id] – удаление цитаты с заданным номером\n' \
+                 '/move [q]; [id] - переместить цитату из текущей очереди в конец другой\n/swap [q]; [id1]; [id2] - поменять местами две цитаты\n' \
+                 '/insert [q]; [id] - вставить цитату в заданное место в очереди'
 
     bot.send_message(message.chat.id, user_help, parse_mode='HTML')
     if message.chat.id == MOD_ID:
@@ -224,7 +224,7 @@ def unban(message):
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
 
-@bot.message_handler(commands=['queue'])
+@bot.message_handler(commands=['push'])
 def add_queue(message):
     if message.chat.id == MOD_ID:
         args = message.text[7:].split('; ')
@@ -256,7 +256,7 @@ def add_queue(message):
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
 
-@bot.message_handler(commands=['get_queue'])
+@bot.message_handler(commands=['get'])
 def get_queue(message):
     if message.chat.id == MOD_ID:
         args = message.text[11:]
@@ -298,7 +298,7 @@ def get_banlist(message):
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
 
-@bot.message_handler(commands=['del_quote'])
+@bot.message_handler(commands=['delete'])
 def del_quote(message):
     if message.chat.id == MOD_ID:
         args = message.text[11:].split('; ')
@@ -337,7 +337,7 @@ def del_quote(message):
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
 
-@bot.message_handler(commands=['clear_queue'])
+@bot.message_handler(commands=['clear'])
 def clear_queue(message):
     if message.chat.id == MOD_ID:
         keyboard = telebot.types.InlineKeyboardMarkup()
@@ -349,7 +349,7 @@ def clear_queue(message):
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
 
-@bot.message_handler(commands=['edit_quote'])
+@bot.message_handler(commands=['edit'])
 def edit_quote(message):
     if message.chat.id == MOD_ID:
         args = message.text[12:].split('; ')
@@ -386,7 +386,7 @@ def edit_quote(message):
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
 
-@bot.message_handler(commands=['move_quote'])
+@bot.message_handler(commands=['move'])
 def move_quote(message):
     if message.chat.id == MOD_ID:
         args = message.text[12:].split('; ')
@@ -422,7 +422,7 @@ def move_quote(message):
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
 
-@bot.message_handler(commands=['swap_queue'])
+@bot.message_handler(commands=['swap'])
 def swap_queue(message):
     if message.chat.id == MOD_ID:
         args = message.text[12:].split('; ')
@@ -456,7 +456,7 @@ def swap_queue(message):
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
 
-@bot.message_handler(commands=['insert_quote'])
+@bot.message_handler(commands=['insert'])
 def insert_quote(message):
     if message.chat.id == MOD_ID:
         args = message.text[14:].split('; ')
