@@ -227,7 +227,7 @@ def unban(message):
 @bot.message_handler(commands=['push'])
 def add_queue(message):
     if message.chat.id == MOD_ID:
-        args = message.text[5:].split('; ')
+        args = message.text[6:].split('; ')
 
         if len(args) == 2:
             if args[0] == 'b':
@@ -259,7 +259,7 @@ def add_queue(message):
 @bot.message_handler(commands=['get'])
 def get_queue(message):
     if message.chat.id == MOD_ID:
-        args = message.text[4:]
+        args = message.text[5:]
 
         if args == 'b':
             queue_b = True
@@ -301,7 +301,7 @@ def get_banlist(message):
 @bot.message_handler(commands=['delete'])
 def del_quote(message):
     if message.chat.id == MOD_ID:
-        args = message.text[7:].split('; ')
+        args = message.text[8:].split('; ')
 
         if len(args) == 2:
             if args[0] == 'b':
@@ -389,7 +389,7 @@ def edit_quote(message):
 @bot.message_handler(commands=['move'])
 def move_quote(message):
     if message.chat.id == MOD_ID:
-        args = message.text[5:].split('; ')
+        args = message.text[6:].split('; ')
 
         if len(args) == 2:
             if args[0] == 'b':
@@ -406,9 +406,9 @@ def move_quote(message):
 
             if quote_id in queue.keys():
                 quote = queue[quote_id]
-                message.text = f'/del_quote {b}; {quote_id}'
+                message.text = f'/delete {b}; {quote_id}'
                 del_quote(message)
-                message.text = f'/queue {"b" if queue_b else "a"}; {quote}'
+                message.text = f'/push {"a" if queue_b else "b"}; {quote}'
                 add_queue(message)
             else:
                 bot.send_message(MOD_ID, 'Цитаты с таким номером не существует!')
@@ -459,7 +459,7 @@ def swap_queue(message):
 @bot.message_handler(commands=['insert'])
 def insert_quote(message):
     if message.chat.id == MOD_ID:
-        args = message.text[7:].split('; ')
+        args = message.text[8:].split('; ')
 
         if len(args) == 3:
             if args[0] == 'b':
