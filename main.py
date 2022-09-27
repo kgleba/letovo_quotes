@@ -15,7 +15,8 @@ CHANNEL_ID = '@letovo_quotes'
 CHANNEL_B_ID = '@letovo_b_quotes'
 MOD_ID = -1001791070494
 VOTING_ID = -1001645253084
-MOD_LIST = [1920379812, 1095891795, 1273466303, 1308606295]
+MOD_LIST = [1920379812, 1095891795, 1273466303, 1308606295, 1224945213, 566239378, 1050307229, 1711739283, 1546943628]
+ADMIN_LIST = [1920379812, 1095891795, 1273466303, 1308606295]
 BAN_TIME = 3600
 
 bot = telebot.TeleBot(TOKEN)
@@ -95,7 +96,6 @@ def handle_quote(message, quote):
         else:
             call_count = 0
 
-        # TODO: имена для кнопок
         keyboard = telebot.types.InlineKeyboardMarkup()
         keyboard.add(telebot.types.InlineKeyboardButton(text='➕ За', callback_data=f'upvote: {call_count}'))
         keyboard.add(telebot.types.InlineKeyboardButton(text='➖ Против', callback_data=f'downvote: {call_count}'))
@@ -575,9 +575,10 @@ def button_handler(call):
                     pending[actual_quote_id]['reputation']['+'].append(call.from_user.id)
                 else:
                     pending[actual_quote_id]['reputation']['-'].append(call.from_user.id)
+                bot.answer_callback_query(call.id, 'Спасибо за голос!')
             else:
                 bot.answer_callback_query(call.id, 'Ты уже проголосовал!')
-        elif action[0] == 'reject' and call.from_user.id in MOD_LIST:
+        elif action[0] == 'reject' and call.from_user.id in ADMIN_LIST:
             rejected = backend.open_json('rejected.json')
 
             bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', VOTING_ID,
@@ -638,6 +639,8 @@ for data in POST_TIME:
 
 for data in POST_TIME_B:
     schedule.every().day.at(data).do(partial(publish_quote, True))
+
+schedule.every().day.at('21:00').do(quote_verdict)
 
 while True:
     schedule.run_pending()
