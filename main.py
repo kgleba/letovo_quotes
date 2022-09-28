@@ -120,45 +120,48 @@ def quote_verdict():
 
     accept = 3
     accept_b = 1
-    min_votes = 4
+    min_votes = 6
+
+    updated_pending = []
 
     for quote in pending.values():
-        quote = quote['text']
+        quote_text = quote['text']
         message_id = quote['message_id']
         author_id = quote['source'][0]
         source_id = quote['source'][1]
         reputation = len(quote['reputation']['+']) - len(quote['reputation']['-'])
 
         if len(quote['reputation']['+']) + len(quote['reputation']['-']) < min_votes:
+            updated_pending.append(quote)
             continue
 
-        if reputation > accept:
+        if reputation >= accept:
             queue = backend.open_json('queue.json')
             queue_b = False
-        elif reputation > accept_b:
+        elif reputation >= accept_b:
             queue = backend.open_json('queue_b.json')
             queue_b = True
         else:
             bot.edit_message_text(
                 f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
-                f'предложил следующую цитату:\n\n{quote}\n\nОтклонено модерацией',
+                f'предложил следующую цитату:\n\n{quote_text}\n\nОтклонено модерацией',
                 VOTING_ID, message_id, reply_markup=None)
             bot.send_message(author_id, 'Ваша цитата была отклонена :(', reply_to_message_id=source_id)
-            return
+            continue
 
         next_quote_id = len(queue)
-        queue.update({str(next_quote_id): quote})
+        queue.update({str(next_quote_id): quote_text})
 
         if queue_b:
             bot.edit_message_text(
                 f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
-                f'предложил следующую цитату:\n\n{quote}\n\nОпубликовано в жмых модерацией',
+                f'предложил следующую цитату:\n\n{quote_text}\n\nОпубликовано в жмых модерацией',
                 VOTING_ID, message_id, reply_markup=None)
             bot.send_message(author_id, 'Ваша цитата отправлена в очередь в жмых!', reply_to_message_id=source_id)
         else:
             bot.edit_message_text(
                 f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
-                f'предложил следующую цитату:\n\n{quote}\n\nОпубликовано модерацией',
+                f'предложил следующую цитату:\n\n{quote_text}\n\nОпубликовано модерацией',
                 VOTING_ID, message_id, reply_markup=None)
             bot.send_message(author_id, 'Ваша цитата отправлена в очередь на публикацию!', reply_to_message_id=source_id)
 
@@ -166,6 +169,12 @@ def quote_verdict():
             backend.save_json(queue, 'queue_b.json')
         else:
             backend.save_json(queue, 'queue.json')
+
+    pending = {}
+    for i, text in enumerate(updated_pending):
+        pending[str(i)] = text
+
+    backend.save_json(pending, 'pending.json')
 
 
 @bot.message_handler(commands=['start'])
@@ -201,7 +210,7 @@ def bot_help(message):
                  '/insert [q]; [id] - вставить цитату в заданное место в очереди'
 
     bot.send_message(message.chat.id, user_help, parse_mode='HTML')
-    if message.chat.id == MOD_ID or message.chat.id == VOTING_ID:
+    if message.chat.id in (MOD_ID, VOTING_ID):
         bot.send_message(message.chat.id, admin_help, parse_mode='HTML')
 
 
@@ -273,8 +282,8 @@ def unban(message):
         if user_id not in banlist:
             bot.send_message(message.chat.id, f'Пользователь {user_id} не заблокирован!')
             return
-        else:
-            banlist.pop(user_id)
+
+        banlist.pop(user_id)
 
         bot.send_message(message.chat.id, f'Пользователь {user_id} успешно разблокирован!')
         banned_log = bot.send_message(MOD_ID,
@@ -421,7 +430,7 @@ def edit_quote(message):
                 queue_b = False
                 queue = backend.open_json('queue.json')
 
-            b, quote_id, new_text = args
+            _, quote_id, new_text = args
 
             if quote_id in queue:
                 queue[quote_id] = new_text
@@ -597,7 +606,7 @@ def button_handler(call):
         backend.save_json(pending, 'pending.json')
 
     else:
-        if call.data == 'clear: a' or call.data == 'clear: b':
+        if call.data in ('clear: a', 'clear: b'):
             if call.data == 'clear: a':
                 backend.save_json({}, 'queue.json')
             else:
@@ -616,7 +625,7 @@ if __name__ == '__main__':
         server = Flask('__main__')
 
 
-        @server.route(f'/updates', methods=['POST'])
+        @server.route('/updates', methods=['POST'])
         def get_messages():
             bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode('utf-8'))])
             return '!', 200
@@ -625,7 +634,7 @@ if __name__ == '__main__':
         @server.route('/')
         def webhook():
             bot.remove_webhook()
-            bot.set_webhook(url=f'https://letovo-quotes.herokuapp.com/updates', max_connections=1)
+            bot.set_webhook(url='https://letovo-quotes.herokuapp.com/updates', max_connections=1)
             return '?', 200
 
 
@@ -640,7 +649,7 @@ for data in POST_TIME:
 for data in POST_TIME_B:
     schedule.every().day.at(data).do(partial(publish_quote, True))
 
-schedule.every().day.at('21:00').do(quote_verdict)
+schedule.every().day.at('9:00').do(quote_verdict)
 
 while True:
     schedule.run_pending()
