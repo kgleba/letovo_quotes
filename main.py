@@ -649,7 +649,7 @@ for data in POST_TIME:
 for data in POST_TIME_B:
     schedule.every().day.at(data).do(partial(publish_quote, True))
 
-schedule.every().day.at('9:00').do(quote_verdict)
+schedule.every().day.at('18:00').do(quote_verdict)
 
 while True:
     schedule.run_pending()
