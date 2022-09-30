@@ -122,9 +122,9 @@ def quote_verdict():
     accept_b = 1
     min_votes = 6
 
-    updated_pending = []
+    updated_pending = {}
 
-    for quote in pending.values():
+    for key, quote in pending.items():
         quote_text = quote['text']
         message_id = quote['message_id']
         author_id = quote['source'][0]
@@ -132,7 +132,7 @@ def quote_verdict():
         reputation = len(quote['reputation']['+']) - len(quote['reputation']['-'])
 
         if len(quote['reputation']['+']) + len(quote['reputation']['-']) < min_votes:
-            updated_pending.append(quote)
+            updated_pending.update({key: quote})
             continue
 
         if reputation >= accept:
@@ -170,11 +170,7 @@ def quote_verdict():
         else:
             backend.save_json(queue, 'queue.json')
 
-    pending = {}
-    for i, text in enumerate(updated_pending):
-        pending[str(i)] = text
-
-    backend.save_json(pending, 'pending.json')
+    backend.save_json(updated_pending, 'pending.json')
 
 
 @bot.message_handler(commands=['start'])
