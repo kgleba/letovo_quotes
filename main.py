@@ -483,7 +483,7 @@ def move_quote(message):
 @bot.message_handler(commands=['swap'])
 def swap_queue(message):
     if message.chat.id == MOD_ID:
-        args = message.text[5:].split('; ')
+        args = message.text[6:].split('; ')
 
         if len(args) == 3:
             if args[0] == 'b':
