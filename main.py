@@ -434,7 +434,7 @@ def edit_quote(message):
                 bot.send_message(MOD_ID, 'Цитаты с таким номером не существует!')
                 return
 
-            bot.send_message(MOD_ID, f'Успешно изменил цитату под номером {quote_id} в очереди {'b' if queue_b else 'a'}!')
+            bot.send_message(MOD_ID, f'Успешно изменил цитату под номером {quote_id} в очереди {"B" if queue_b else "A"}!')
 
             if queue_b:
                 backend.save_json(queue, 'queue_b.json')
