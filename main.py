@@ -416,7 +416,7 @@ def clear_queue(message):
 @bot.message_handler(commands=['edit'])
 def edit_quote(message):
     if message.chat.id == MOD_ID:
-        args = message.text[5:].split('; ')
+        args = message.text[6:].split('; ')
 
         if len(args) == 3:
             if args[0] == 'b':
@@ -434,7 +434,7 @@ def edit_quote(message):
                 bot.send_message(MOD_ID, 'Цитаты с таким номером не существует!')
                 return
 
-            bot.send_message(MOD_ID, f'Успешно изменил цитату под номером {quote_id}!')
+            bot.send_message(MOD_ID, f'Успешно изменил цитату под номером {quote_id} в очереди {'b' if queue_b else 'a'}!')
 
             if queue_b:
                 backend.save_json(queue, 'queue_b.json')
