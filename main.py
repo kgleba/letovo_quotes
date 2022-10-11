@@ -15,8 +15,8 @@ CHANNEL_ID = '@letovo_quotes'
 CHANNEL_B_ID = '@letovo_b_quotes'
 MOD_ID = -1001791070494
 VOTING_ID = -1001645253084
-MOD_LIST = [1920379812, 1095891795, 1273466303, 1308606295, 1224945213, 566239378, 1050307229, 1711739283, 1546943628]
 ADMIN_LIST = [1920379812, 1095891795, 1273466303, 1308606295]
+MOD_LIST = ADMIN_LIST + [1224945213, 566239378, 1050307229, 1711739283, 1546943628]
 BAN_TIME = 3600
 
 bot = telebot.TeleBot(TOKEN)
@@ -119,7 +119,6 @@ def quote_verdict():
     pending = backend.open_json('pending.json')
 
     accept = 3
-    accept_b = 1
     min_votes = 6
 
     updated_pending = {}
@@ -138,9 +137,6 @@ def quote_verdict():
         if reputation >= accept:
             queue = backend.open_json('queue.json')
             queue_b = False
-        elif reputation >= accept_b:
-            queue = backend.open_json('queue_b.json')
-            queue_b = True
         else:
             bot.edit_message_text(
                 f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
@@ -152,23 +148,13 @@ def quote_verdict():
         next_quote_id = len(queue)
         queue.update({str(next_quote_id): quote_text})
 
-        if queue_b:
-            bot.edit_message_text(
-                f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
-                f'предложил следующую цитату:\n\n{quote_text}\n\nОпубликовано в жмых модерацией',
-                VOTING_ID, message_id, reply_markup=None)
-            bot.send_message(author_id, 'Ваша цитата отправлена в очередь в жмых!', reply_to_message_id=source_id)
-        else:
-            bot.edit_message_text(
-                f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
-                f'предложил следующую цитату:\n\n{quote_text}\n\nОпубликовано модерацией',
-                VOTING_ID, message_id, reply_markup=None)
-            bot.send_message(author_id, 'Ваша цитата отправлена в очередь на публикацию!', reply_to_message_id=source_id)
+        bot.edit_message_text(
+            f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
+            f'предложил следующую цитату:\n\n{quote_text}\n\nОпубликовано модерацией',
+            VOTING_ID, message_id, reply_markup=None)
+        bot.send_message(author_id, 'Ваша цитата отправлена в очередь на публикацию!', reply_to_message_id=source_id)
 
-        if queue_b:
-            backend.save_json(queue, 'queue_b.json')
-        else:
-            backend.save_json(queue, 'queue.json')
+        backend.save_json(queue, 'queue.json')
 
     backend.save_json(updated_pending, 'pending.json')
 
