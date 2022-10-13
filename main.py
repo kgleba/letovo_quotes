@@ -603,7 +603,7 @@ def button_handler(call):
 
 
 if __name__ == '__main__':
-    if 'HEROKU' in os.environ:
+    if 'SERVER' in os.environ:
         server = Flask('__main__')
 
 
@@ -616,7 +616,7 @@ if __name__ == '__main__':
         @server.route('/')
         def webhook():
             bot.remove_webhook()
-            bot.set_webhook(url='https://letovo-quotes.herokuapp.com/updates', max_connections=1)
+            bot.set_webhook(url='https://letovo-quotes-iqn5a.ondigitalocean.app/updates', max_connections=1)
             return '?', 200
 
 
