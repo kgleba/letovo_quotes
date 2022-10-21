@@ -118,7 +118,7 @@ def handle_quote(message, quote):
 def quote_verdict():
     pending = backend.open_json('pending.json')
 
-    accept = 3
+    accept = 2
     min_votes = 6
 
     updated_pending = {}
