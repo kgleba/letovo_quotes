@@ -117,6 +117,7 @@ def handle_quote(message, quote):
 
 def quote_verdict():
     pending = backend.open_json('pending.json')
+    rejected = backend.open_json('rejected.json')
 
     accept = 2
     min_votes = 6
@@ -136,13 +137,18 @@ def quote_verdict():
 
         if reputation >= accept:
             queue = backend.open_json('queue.json')
-            queue_b = False
         else:
             bot.edit_message_text(
                 f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
-                f'предложил следующую цитату:\n\n{quote_text}\n\nОтклонено модерацией',
+                f'предложил следующую цитату:\n\n{quote_text}\n\nОтклонено модерацией с рейтингом {reputation}',
                 VOTING_ID, message_id, reply_markup=None)
             bot.send_message(author_id, 'Ваша цитата была отклонена :(', reply_to_message_id=source_id)
+
+            if rejected:
+                rejected.update({str(max(map(int, rejected)) + 1): [quote_text, reputation]})
+            else:
+                rejected.update({'0': [quote_text, reputation]})
+
             continue
 
         next_quote_id = len(queue)
@@ -150,13 +156,14 @@ def quote_verdict():
 
         bot.edit_message_text(
             f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
-            f'предложил следующую цитату:\n\n{quote_text}\n\nОпубликовано модерацией',
+            f'предложил следующую цитату:\n\n{quote_text}\n\nОпубликовано модерацией с рейтингом {reputation}',
             VOTING_ID, message_id, reply_markup=None)
         bot.send_message(author_id, 'Ваша цитата отправлена в очередь на публикацию!', reply_to_message_id=source_id)
 
         backend.save_json(queue, 'queue.json')
 
     backend.save_json(updated_pending, 'pending.json')
+    backend.save_json(rejected, 'rejected.json')
 
 
 @bot.message_handler(commands=['start'])
@@ -321,7 +328,7 @@ def get_queue(message):
             return
 
         for quote_id, quote in queue.items():
-            bot.send_message(MOD_ID, f'#{quote_id}\n{quote}')
+            bot.send_message(message.chat.id, f'#{quote_id}\n{quote}')
     else:
         bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
 
@@ -540,6 +547,10 @@ def text_handler(message):
     if waiting_for_suggest.get(author_id, False) and waiting_for_suggest[author_id]:
         handle_quote(message, message.text)
         waiting_for_suggest[author_id] = False
+
+    if message.chat.id == -1001742201177 and message.from_user.username == 'Channel_Bot' and message.sender_chat.title != 'Забавные цитаты Летово':
+        bot.delete_message(message.chat.id, message.message_id)
+        bot.kick_chat_member(message.chat.id, message.from_user.id)
 
 
 @bot.callback_query_handler(func=lambda call: True)
