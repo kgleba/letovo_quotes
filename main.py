@@ -119,8 +119,8 @@ def quote_verdict():
     pending = backend.open_json('pending.json')
     rejected = backend.open_json('rejected.json')
 
-    accept = 2
-    min_votes = 6
+    accept = 3
+    min_votes = 7
 
     updated_pending = {}
 
