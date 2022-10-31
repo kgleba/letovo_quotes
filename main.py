@@ -99,6 +99,7 @@ def handle_quote(message, quote):
         keyboard = telebot.types.InlineKeyboardMarkup()
         keyboard.add(telebot.types.InlineKeyboardButton(text='➕ За', callback_data=f'upvote: {call_count}'))
         keyboard.add(telebot.types.InlineKeyboardButton(text='➖ Против', callback_data=f'downvote: {call_count}'))
+        keyboard.add(telebot.types.InlineKeyboardButton(text='❔ Изменить голос', callback_data=f'swap: {call_count}'))
         keyboard.add(telebot.types.InlineKeyboardButton(text='🚫 Отклонить (только администраторы)', callback_data=f'reject: {call_count}'))
 
         sent_quote = bot.send_message(VOTING_ID,
@@ -111,7 +112,7 @@ def handle_quote(message, quote):
         backend.save_json(pending, 'pending.json')
     else:
         bot.send_message(message.chat.id,
-                         f'Вы были заблокированы, поэтому не можете предлагать цитаты. Оставшееся время блокировки: {format_time(banlist[author_id] - int(time.time()))}')
+                         f'Ты был заблокирован, поэтому не можешь предлагать цитаты. Оставшееся время блокировки: {format_time(banlist[author_id] - int(time.time()))}')
         return
 
 
@@ -142,7 +143,7 @@ def quote_verdict():
                 f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
                 f'предложил следующую цитату:\n\n{quote_text}\n\nОтклонено модерацией с рейтингом {reputation}',
                 VOTING_ID, message_id, reply_markup=None)
-            bot.send_message(author_id, 'Ваша цитата была отклонена :(', reply_to_message_id=source_id)
+            bot.send_message(author_id, 'Твоя цитата была отклонена :(', reply_to_message_id=source_id)
 
             if rejected:
                 rejected.update({str(max(map(int, rejected)) + 1): [quote_text, reputation]})
@@ -158,7 +159,7 @@ def quote_verdict():
             f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
             f'предложил следующую цитату:\n\n{quote_text}\n\nОпубликовано модерацией с рейтингом {reputation}',
             VOTING_ID, message_id, reply_markup=None)
-        bot.send_message(author_id, 'Ваша цитата отправлена в очередь на публикацию!', reply_to_message_id=source_id)
+        bot.send_message(author_id, 'Твоя цитата отправлена в очередь на публикацию!', reply_to_message_id=source_id)
 
         backend.save_json(queue, 'queue.json')
 
@@ -215,7 +216,7 @@ def suggest_rollback(message):
 
             bot.edit_message_text(f'{quote_text}\n\nПредложенная цитата была отклонена автором.', VOTING_ID,
                                   quote_id, reply_markup=None)
-            bot.send_message(message.chat.id, 'Успешно отозвал вашу последнюю предложенную цитату!')
+            bot.send_message(message.chat.id, 'Успешно отозвал твою последнюю предложенную цитату!')
 
             backend.save_json(pending, 'pending.json')
 
@@ -254,7 +255,7 @@ def ban(message):
 
         bot.send_message(message.chat.id, f'Пользователь {user_id} успешно заблокирован!')
     else:
-        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
 
 
 @bot.message_handler(commands=['unban'])
@@ -281,7 +282,7 @@ def unban(message):
 
         backend.save_json(banlist, 'banlist.json')
     else:
-        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
 
 
 @bot.message_handler(commands=['push'])
@@ -310,7 +311,7 @@ def add_queue(message):
             bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
             return
     else:
-        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
 
 
 @bot.message_handler(commands=['get'])
@@ -330,7 +331,7 @@ def get_queue(message):
         for quote_id, quote in queue.items():
             bot.send_message(message.chat.id, f'#{quote_id}\n{quote}')
     else:
-        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
 
 
 @bot.message_handler(commands=['get_banlist'])
@@ -347,7 +348,7 @@ def get_banlist(message):
         for key, value in banlist.items():
             bot.send_message(message.chat.id, key + ': ' + format_time(int(value)))
     else:
-        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
 
 
 @bot.message_handler(commands=['delete'])
@@ -383,7 +384,7 @@ def del_quote(message):
             bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
             return
     else:
-        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
 
 
 @bot.message_handler(commands=['clear'])
@@ -401,9 +402,9 @@ def clear_queue(message):
             return
 
         keyboard.add(telebot.types.InlineKeyboardButton(text='➖ Нет', callback_data='clear: no'))
-        bot.send_message(MOD_ID, 'Вы уверены в том, что хотите очистить очередь публикаций?', reply_markup=keyboard)
+        bot.send_message(MOD_ID, 'Ты уверен в том, что хочешь очистить очередь публикаций?', reply_markup=keyboard)
     else:
-        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
 
 
 @bot.message_handler(commands=['edit'])
@@ -437,7 +438,7 @@ def edit_quote(message):
             bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
             return
     else:
-        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
 
 
 @bot.message_handler(commands=['move'])
@@ -470,7 +471,7 @@ def move_quote(message):
             bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
             return
     else:
-        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
 
 
 @bot.message_handler(commands=['swap'])
@@ -501,7 +502,7 @@ def swap_queue(message):
             bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
             return
     else:
-        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
 
 
 @bot.message_handler(commands=['insert'])
@@ -528,7 +529,7 @@ def insert_quote(message):
 
                 bot.send_message(MOD_ID, 'Успешно вставил цитату в очередь!')
             else:
-                bot.send_message(message.chat.id, 'Вставлять дальше, чем в конец очереди нельзя!')
+                bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
 
             if queue_b:
                 backend.save_json(queue, 'queue_b.json')
@@ -538,7 +539,7 @@ def insert_quote(message):
             bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
             return
     else:
-        bot.send_message(message.chat.id, 'У вас нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
 
 
 @bot.message_handler(content_types=['text'])
@@ -557,7 +558,7 @@ def text_handler(message):
 def button_handler(call):
     action = call.data.split(':')
 
-    if action[0] in ['upvote', 'downvote', 'reject']:
+    if action[0] in ['upvote', 'downvote', 'swap', 'reject']:
         pending = backend.open_json('pending.json')
 
         actual_quote_id = action[1].replace(' ', '')
@@ -579,13 +580,22 @@ def button_handler(call):
                     pending[actual_quote_id]['reputation']['-'].append(call.from_user.id)
                 bot.answer_callback_query(call.id, 'Спасибо за голос!')
             else:
-                bot.answer_callback_query(call.id, 'Ты уже проголосовал!')
+                bot.answer_callback_query(call.id, f'Ты уже проголосовал {"за" if call.from_user.id in reputation["+"] else "против"}!')
+        elif action[0] == 'swap':
+            if call.from_user.id in reputation['+']:
+                pending[actual_quote_id]['reputation']['+'].remove(call.from_user.id)
+                pending[actual_quote_id]['reputation']['-'].append(call.from_user.id)
+            elif call.from_user.id in reputation['-']:
+                pending[actual_quote_id]['reputation']['-'].remove(call.from_user.id)
+                pending[actual_quote_id]['reputation']['+'].append(call.from_user.id)
+            else:
+                bot.answer_callback_query(call.id, 'Ты еще не голосовал!')
         elif action[0] == 'reject' and call.from_user.id in ADMIN_LIST:
             rejected = backend.open_json('rejected.json')
 
             bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', VOTING_ID,
                                   call.message.id, reply_markup=None)
-            bot.send_message(author_id, 'Ваша цитата была отклонена :(', reply_to_message_id=source_id)
+            bot.send_message(author_id, 'Твоя цитата была отклонена :(', reply_to_message_id=source_id)
 
             if rejected:
                 rejected.update({str(max(map(int, rejected)) + 1): call.message.text})
