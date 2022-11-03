@@ -139,7 +139,7 @@ def quote_verdict():
         if len(quote['reputation']['+']) + len(quote['reputation']['-']) < min_votes:
             updated_pending.update({key: quote})
 
-            not_voted = set(MOD_LIST) - set(pending[message_id]['reputation']['+'] + pending[message_id]['reputation']['-'])
+            not_voted = set(MOD_LIST) - set(quote['reputation']['+'] + quote['reputation']['-'])
             if not_voted:
                 bot.send_message(VOTING_ID, 'Цитата не набрала нужного количества голосов. Проголосуйте за нее, пожалуйста:'
                                  + ' '.join(MOD_LIST[mod] for mod in not_voted), reply_to_message_id=message_id)
