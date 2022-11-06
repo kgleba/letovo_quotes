@@ -141,8 +141,10 @@ def quote_verdict():
 
             not_voted = set(MOD_LIST) - set(quote['reputation']['+'] + quote['reputation']['-'])
             if not_voted:
-                bot.send_message(VOTING_ID, 'Цитата не набрала нужного количества голосов. Проголосуйте за нее, пожалуйста:'
-                                 + ' '.join(MOD_LIST[mod] for mod in not_voted), reply_to_message_id=message_id)
+                bot.send_message(VOTING_ID, 'Цитата не набрала нужного количества голосов. '
+                                 + ' '.join(MOD_LIST[mod] for mod in not_voted)
+                                 + ', проголосуйте за нее, пожалуйста!'
+                                 , reply_to_message_id=message_id)
 
             continue
 
