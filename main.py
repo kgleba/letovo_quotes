@@ -275,8 +275,8 @@ def unban(message):
     if message.from_user.id in MOD_LIST:
         user_id, reason = message.text[7:].split('; ')
 
-        if not user_id.isdigit():
-            bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
+        if not reason or not user_id.isdigit():
+            bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
             return
 
         banlist = backend.open_json('banlist.json')
