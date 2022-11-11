@@ -273,9 +273,14 @@ def ban(message):
 @bot.message_handler(commands=['unban'])
 def unban(message):
     if message.from_user.id in MOD_LIST:
-        user_id, reason = message.text[7:].split('; ')
+        args = message.text[7:].split('; ')
 
-        if not reason or not user_id.isdigit():
+        if len(args) >= 2:
+            user_id, reason = args
+            if not user_id.isdigit():
+                bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+                return
+        else:
             bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
             return
 
