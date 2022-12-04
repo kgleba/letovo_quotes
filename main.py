@@ -19,10 +19,14 @@ ADMIN_LIST = {1920379812: '@kglebaa', 1095891795: '@dr_platon', 1273466303: '@bo
 MOD_LIST = {1224945213: '@DomineSalvaNos', 566239378: '@IvanFenster', 1050307229: '@GonSerg', 1711739283: '@Dr_Vortep',
             1546943628: '@andrushkazbr'}
 MOD_LIST.update(ADMIN_LIST)
+
 BAN_TIME = 3600
+ACCEPT = 3
+MIN_VOTES = 7
 
 bot = telebot.TeleBot(TOKEN)
 waiting_for_suggest = {}
+voting_notif_ids = []
 
 backend.load_json('queue.json')
 backend.load_json('queue_b.json')
@@ -124,9 +128,10 @@ def quote_verdict():
     pending = backend.open_json('pending.json')
     rejected = backend.open_json('rejected.json')
 
-    accept = 3
-    min_votes = 7
+    for notif_id in voting_notif_ids:
+        bot.delete_message(VOTING_ID, notif_id)
 
+    voting_notif_ids.clear()
     updated_pending = {}
 
     for key, quote in pending.items():
@@ -136,21 +141,20 @@ def quote_verdict():
         source_id = quote['source'][1]
         reputation = len(quote['reputation']['+']) - len(quote['reputation']['-'])
 
-        if len(quote['reputation']['+']) + len(quote['reputation']['-']) < min_votes:
+        if len(quote['reputation']['+']) + len(quote['reputation']['-']) < MIN_VOTES:
             updated_pending.update({key: quote})
 
             not_voted = set(MOD_LIST) - set(quote['reputation']['+'] + quote['reputation']['-'])
             if not_voted:
-                bot.send_message(VOTING_ID, 'Цитата не набрала нужного количества голосов. '
+                sent_notif = bot.send_message(VOTING_ID, 'Цитата не набрала нужного количества голосов. '
                                  + ' '.join(MOD_LIST[mod] for mod in not_voted)
                                  + ', проголосуйте за нее, пожалуйста!'
-                                 , reply_to_message_id=message_id)
+                                 , disable_notification=True, reply_to_message_id=message_id)
+                voting_notif_ids.append(sent_notif.message_id)
 
             continue
 
-        if reputation >= accept:
-            queue = backend.open_json('queue.json')
-        else:
+        if reputation < ACCEPT:
             bot.edit_message_text(
                 f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
                 f'предложил следующую цитату:\n\n{quote_text}\n\nОтклонено модерацией с рейтингом {reputation}',
@@ -164,6 +168,7 @@ def quote_verdict():
 
             continue
 
+        queue = backend.open_json('queue.json')
         next_quote_id = len(queue)
         queue.update({str(next_quote_id): quote_text})
 
@@ -226,8 +231,10 @@ def suggest_rollback(message):
             quote_text = sent_quote['text']
             quote_id = sent_quote['message_id']
 
-            bot.edit_message_text(f'{quote_text}\n\nПредложенная цитата была отклонена автором.', VOTING_ID,
-                                  quote_id, reply_markup=None)
+            bot.edit_message_text(
+                f'Пользователь @{sent_quote["author"][1]} [ID: {sent_quote["author"][0]}] '
+                f'предложил следующую цитату:\n\n{quote_text}\n\nПредложенная цитата была отклонена автором.',
+                VOTING_ID, quote_id, reply_markup=None)
             bot.send_message(message.chat.id, 'Успешно отозвал твою последнюю предложенную цитату!')
 
             backend.save_json(pending, 'pending.json')
