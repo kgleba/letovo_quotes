@@ -13,12 +13,10 @@ Main commands:
 4. `/push` - add a quote to the publish queue
 5. `/get` - get all quotes in the queue
 6. `/edit` - edit a quote with a given id
-7. `/delete` - delete a quote with a given id from queue
+7. `/delete` - delete a quote with a given id from the queue
 8. `/clear` - clear the queue
-9. `/move` - move a quote from one queue to the end of another one
-10. `/swap` - swap two quotes in the queue
-11. `/insert` - insert a quote into the queue
+9. `/swap` - swap two quotes in the queue
+10. `/insert` - insert a quote into the queue
 
 All data is stored in a GitLab repository.
-Main channel: quotes post at 12 AM (UTC+3).
-Second channel: quotes post at 12 AM and 6 PM (UTC+3).
+Quotes are posted automatically at 12 AM (UTC+3).
