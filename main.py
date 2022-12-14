@@ -257,12 +257,11 @@ def ban(message):
                                       f'Модератор @{message.from_user.username} заблокировал пользователя {user_id} по причине "{reason}"')
         bot.pin_chat_message(MOD_ID, banned_log.message_id)
 
-        bot.send_message(user_id, f'Ты был заблокирован по причине {reason}. Оставшееся время блокировки: {format_time(banlist[user_id] - int(time.time()))}')
-
         banlist = backend.open_json('banlist.json')
         banlist.update({user_id: int(time.time()) + int(period)})
         backend.save_json(banlist, 'banlist.json')
 
+        bot.send_message(user_id, f'Ты был заблокирован по причине {reason}. Оставшееся время блокировки: {format_time(int(period))}')
         bot.send_message(message.chat.id, f'Пользователь {user_id} успешно заблокирован!')
     else:
         bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
