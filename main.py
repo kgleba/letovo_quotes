@@ -116,7 +116,10 @@ def quote_verdict():
     rejected = backend.open_json('rejected.json')
 
     for notif_id in voting_notif_ids:
-        bot.delete_message(VOTING_ID, notif_id)
+        try:
+            bot.delete_message(VOTING_ID, notif_id)
+        except telebot.apihelper.ApiTelegramException:
+            print(f'Не удалось удалить сообщение с ID {notif_id}')
 
     voting_notif_ids.clear()
     updated_pending = {}
@@ -253,6 +256,8 @@ def ban(message):
         banned_log = bot.send_message(MOD_ID,
                                       f'Модератор @{message.from_user.username} заблокировал пользователя {user_id} по причине "{reason}"')
         bot.pin_chat_message(MOD_ID, banned_log.message_id)
+
+        bot.send_message(user_id, f'Ты был заблокирован по причине {reason}. Оставшееся время блокировки: {format_time(banlist[user_id] - int(time.time()))}')
 
         banlist = backend.open_json('banlist.json')
         banlist.update({user_id: int(time.time()) + int(period)})
