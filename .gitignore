@@ -1,0 +1,14 @@
+# PyCharm
+.idea/*
+
+# Python
+__pycache__/*
+
+# Pylint
+.pylintrc
+
+# Local copies of JSON files
+queue.json
+banlist.json
+pending.json
+rejected.json
