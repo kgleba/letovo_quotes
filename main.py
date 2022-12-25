@@ -12,6 +12,8 @@ POST_TIME = os.getenv('POST_TIME').split()
 CHANNEL_ID = '@letovo_quotes'
 MOD_ID = -1001791070494
 VOTING_ID = -1001645253084
+DISCUSSION_ID = -1001742201177
+
 ADMIN_LIST = {1920379812: '@kglebaa', 1095891795: '@dr_platon', 1273466303: '@boris_ber', 1308606295: '@KSPalpatine'}
 MOD_LIST = {1224945213: '@DomineSalvaNos', 566239378: '@IvanFenster', 1050307229: '@GonSerg', 1711739283: '@Dr_Vortep',
             1546943628: '@VoN_is_a_true_hope'}
@@ -92,7 +94,6 @@ def handle_quote(message, quote):
         keyboard = telebot.types.InlineKeyboardMarkup()
         keyboard.add(telebot.types.InlineKeyboardButton(text='➕ За', callback_data=f'upvote: {call_count}'))
         keyboard.add(telebot.types.InlineKeyboardButton(text='➖ Против', callback_data=f'downvote: {call_count}'))
-        keyboard.add(telebot.types.InlineKeyboardButton(text='❔ Изменить голос', callback_data=f'swap: {call_count}'))
         keyboard.add(telebot.types.InlineKeyboardButton(text='🚫 Отклонить (только администраторы)',
                                                         callback_data=f'reject: {call_count}'))
 
@@ -190,7 +191,7 @@ def suggest(message):
         handle_quote(message, quote)
     else:
         bot.send_message(message.chat.id,
-                         'Эта команда используется для отправки цитат в предложку. Все, что тебе нужно сделать - ввести текст после команды /suggest и ждать публикации. '
+                         'Эта команда используется для отправки цитат в предложку. Все, что тебе нужно сделать - ввести текст после команды /suggest (или следующим сообщением) и ждать публикации. '
                          'И, пожалуйста, не пиши ерунду!')
         waiting_for_suggest[message.from_user.id] = True
 
@@ -199,15 +200,20 @@ def suggest(message):
 def bot_help(message):
     user_help = '<b>Пользовательские команды:</b>\n/start – запуск бота\n/help – вызов этого сообщения\n' \
                 '/suggest – предложить цитату\n/suggest_rollback – откатить последнюю предложенную цитату'
-    admin_help = '<b>Админские команды:</b>\n/ban [id]; [reason]; [duration in sec, 3600 by default] – блокировка пользователя\n/unban [id]; [reason] - разблокировка пользователя\n' \
-                 '/get_banlist – список заблокированных в данный момент пользователей\n/get – текущая очередь цитат на публикацию\n' \
-                 '/push [text] – добавление цитаты в очередь\n/clear – очистка очереди на публикацию\n' \
+    mod_help = '<b>Админские команды:</b>\n/ban [id]; [reason]; [duration in sec, 3600 by default] – блокировка пользователя\n/unban [id]; [reason] - разблокировка пользователя\n' \
+               '/get_banlist – список заблокированных в данный момент пользователей\n/get – текущая очередь цитат на публикацию\n' \
+               '/not_voted – получить ссылки на все цитаты в предложке, за которые ты ещё не проголосовал\n'
+    admin_help = '/push [text] – добавление цитаты в очередь\n/clear – очистка очереди на публикацию\n' \
                  '/edit [id]; [text] – изменение цитаты с заданным номером\n/delete [id] – удаление цитаты с заданным номером\n' \
-                 '/swap [id1]; [id2] - поменять местами две цитаты\n/insert [id] - вставить цитату в заданное место в очереди'
+                 '/swap [id1]; [id2] – поменять местами две цитаты\n/insert [id] – вставить цитату в заданное место в очереди\n' \
+                 '/verdict – вызвать определение вердиктов для всех цитат в предложке'
 
     bot.send_message(message.chat.id, user_help, parse_mode='HTML')
-    if message.chat.id in (MOD_ID, VOTING_ID):
-        bot.send_message(message.chat.id, admin_help, parse_mode='HTML')
+
+    if message.chat.id == MOD_ID:
+        bot.send_message(message.chat.id, mod_help + admin_help, parse_mode='HTML')
+    elif message.from_user.id in MOD_LIST:
+        bot.send_message(message.chat.id, mod_help, parse_mode='HTML')
 
 
 @bot.message_handler(commands=['suggest_rollback'])
@@ -229,6 +235,33 @@ def suggest_rollback(message):
             backend.save_json(pending, 'pending.json')
 
             return
+
+
+@bot.message_handler(commands=['verdict'])
+def instant_quote_verdict(message):
+    if message.chat.id == MOD_ID:
+        quote_verdict()
+    else:
+        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+
+
+@bot.message_handler(commands=['not_voted'])
+def not_voted_quotes(message):
+    user_id = message.from_user.id
+    if user_id in MOD_LIST:
+        pending = backend.open_json('pending.json')
+        result = ''
+
+        for quote in pending.values():
+            if user_id not in quote['reputation']['+'] + quote['reputation']['-']:
+                result += f'https://t.me/c/{str(VOTING_ID)[3:]}/{quote["message_id"]}\n'
+
+        if result:
+            bot.send_message(message.chat.id, 'Ты не проголосовал за следующие цитаты:\n' + result)
+        else:
+            bot.send_message(message.chat.id, 'Ты за всё проголосовал! Так держать!')
+    else:
+        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
 
 
 @bot.message_handler(commands=['ban'])
@@ -482,11 +515,11 @@ def insert_quote(message):
 @bot.message_handler(content_types=['text'])
 def text_handler(message):
     author_id = message.from_user.id
-    if waiting_for_suggest.get(author_id, False):
+    if waiting_for_suggest.get(author_id, False) and message.chat.id != DISCUSSION_ID:
         handle_quote(message, message.text)
         waiting_for_suggest[author_id] = False
 
-    if message.chat.id == -1001742201177 and message.from_user.username == 'Channel_Bot' and message.sender_chat.title != 'Забавные цитаты Летово':
+    if message.chat.id == DISCUSSION_ID and message.from_user.username == 'Channel_Bot' and message.sender_chat.title != 'Забавные цитаты Летово':
         bot.delete_message(message.chat.id, message.message_id)
         bot.kick_chat_member(message.chat.id, message.from_user.id)
 
@@ -495,7 +528,7 @@ def text_handler(message):
 def button_handler(call):
     action = call.data.split(':')
 
-    if action[0] in ['upvote', 'downvote', 'swap', 'reject']:
+    if action[0] in ['upvote', 'downvote', 'reject']:
         pending = backend.open_json('pending.json')
 
         actual_quote_id = action[1].replace(' ', '')
@@ -507,29 +540,32 @@ def button_handler(call):
 
         author_id = pending[actual_quote_id]['source'][0]
         source_id = pending[actual_quote_id]['source'][1]
+        moderator_id = call.from_user.id
         reputation = pending[actual_quote_id]['reputation']
 
         if action[0] == 'upvote' or action[0] == 'downvote':
-            if call.from_user.id not in reputation['+'] and call.from_user.id not in reputation['-']:
-                if action[0] == 'upvote':
-                    pending[actual_quote_id]['reputation']['+'].append(call.from_user.id)
-                else:
-                    pending[actual_quote_id]['reputation']['-'].append(call.from_user.id)
+            if action[0] == 'upvote':
+                if moderator_id in reputation['-']:
+                    pending[actual_quote_id]['reputation']['-'].remove(call.from_user.id)
+                    bot.answer_callback_query(call.id, 'Успешно поменял твой голос с "против" на "за"!')
+                elif moderator_id in reputation['+']:
+                    bot.answer_callback_query(call.id, 'Ты уже проголосовал "за"!')
+                    return
+
                 bot.answer_callback_query(call.id, 'Спасибо за голос!')
-            else:
-                bot.answer_callback_query(call.id,
-                                          f'Ты уже проголосовал {"за" if call.from_user.id in reputation["+"] else "против"}!')
-        elif action[0] == 'swap':
-            if call.from_user.id in reputation['+']:
-                pending[actual_quote_id]['reputation']['+'].remove(call.from_user.id)
-                pending[actual_quote_id]['reputation']['-'].append(call.from_user.id)
-                bot.answer_callback_query(call.id, 'Успешно поменял твой голос с "за" на "против"!')
-            elif call.from_user.id in reputation['-']:
-                pending[actual_quote_id]['reputation']['-'].remove(call.from_user.id)
+
                 pending[actual_quote_id]['reputation']['+'].append(call.from_user.id)
-                bot.answer_callback_query(call.id, 'Успешно поменял твой голос с "против" на "за"!')
             else:
-                bot.answer_callback_query(call.id, 'Ты еще не голосовал!')
+                if moderator_id in reputation['+']:
+                    pending[actual_quote_id]['reputation']['+'].remove(call.from_user.id)
+                    bot.answer_callback_query(call.id, 'Успешно поменял твой голос с "за" на "против"!')
+                elif moderator_id in reputation['-']:
+                    bot.answer_callback_query(call.id, 'Ты уже проголосовал "против"!')
+                    return
+
+                bot.answer_callback_query(call.id, 'Спасибо за голос!')
+
+                pending[actual_quote_id]['reputation']['-'].append(call.from_user.id)
         elif action[0] == 'reject' and call.from_user.id in ADMIN_LIST:
             rejected = backend.open_json('rejected.json')
 
