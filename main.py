@@ -287,7 +287,7 @@ def ban(message):
             return
 
         banned_log = bot.send_message(MOD_ID,
-                                      f'Модератор @{message.from_user.username} заблокировал пользователя {user_id} по причине "{reason}"')
+                                      f'Модератор @{message.from_user.username} заблокировал пользователя {user_id} на {period} секунд по причине "{reason}"')
         bot.pin_chat_message(MOD_ID, banned_log.message_id)
 
         banlist = backend.open_json('banlist.json')
