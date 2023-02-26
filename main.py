@@ -15,7 +15,7 @@ VOTING_ID = -1001645253084
 DISCUSSION_ID = -1001742201177
 
 ADMIN_LIST = {1920379812: '@kglebaa', 1095891795: '@dr_platon', 1273466303: '@boris_ber', 1308606295: '@KSPalpatine'}
-MOD_LIST = {1224945213: '@DomineSalvaNos', 566239378: '@IvanFenster', 1050307229: '@GonSerg', 1711739283: '@Dr_Vortep',
+MOD_LIST = {1224945213: '@DomineSalvaNos', 1050307229: '@GonSerg', 1711739283: '@Dr_Vortep',
             1546943628: '@andrushkazbr'}
 MOD_LIST.update(ADMIN_LIST)
 
