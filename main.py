@@ -16,7 +16,7 @@ DISCUSSION_ID = -1001742201177
 
 ADMIN_LIST = {1920379812: '@kglebaa', 1095891795: '@dr_platon', 1273466303: '@boris_ber', 1308606295: '@KSPalpatine'}
 MOD_LIST = {1224945213: '@DomineSalvaNos', 1050307229: '@GonSerg', 1711739283: '@Dr_Vortep',
-            1546943628: '@nomoresources', 1109859757: '@AlexanderG_Po'}
+            1546943628: '@sociolover', 1109859757: '@AlexanderG_Po'}
 MOD_LIST.update(ADMIN_LIST)
 
 BAN_TIME = 3600
@@ -177,6 +177,9 @@ def quote_verdict():
 
 @bot.message_handler(commands=['start'])
 def greetings(message):
+    if message.chat.id == DISCUSSION_ID:
+        return
+
     bot.send_message(message.chat.id,
                      'Привет! Сюда ты можешь предлагать цитаты для публикации в канале "Забавные цитаты Летово". Если ты вдруг еще не подписан - держи ссылку: '
                      'https://t.me/letovo_quotes. Никаких ограничений - предлагай все, что покажется тебе смешным (с помощью команды /suggest), главное, укажи автора цитаты :)')
@@ -185,6 +188,9 @@ def greetings(message):
 
 @bot.message_handler(commands=['suggest'])
 def suggest(message):
+    if message.chat.id == DISCUSSION_ID:
+        return
+
     quote = backend.reformat_quote(message.text[9:])
 
     if quote:
@@ -198,6 +204,9 @@ def suggest(message):
 
 @bot.message_handler(commands=['help'])
 def bot_help(message):
+    if message.chat.id == DISCUSSION_ID:
+        return
+
     user_help = '<b>Пользовательские команды:</b>\n/start – запуск бота\n/help – вызов этого сообщения\n' \
                 '/suggest – предложить цитату\n/suggest_rollback – откатить последнюю предложенную цитату'
     mod_help = '<b>Админские команды:</b>\n/ban [id]; [reason]; [duration in sec, 3600 by default] – блокировка пользователя\n/unban [id]; [reason] - разблокировка пользователя\n' \
@@ -218,6 +227,9 @@ def bot_help(message):
 
 @bot.message_handler(commands=['suggest_rollback'])
 def suggest_rollback(message):
+    if message.chat.id == DISCUSSION_ID:
+        return
+
     pending = backend.open_json('pending.json')
 
     for counter, sent_quote in reversed(pending.items()):
