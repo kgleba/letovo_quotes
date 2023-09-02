@@ -262,14 +262,15 @@ def not_voted_quotes(message):
     user_id = message.from_user.id
     target = message.text[11:]
 
-    if not target or not target.isdigit() or not int(target) in MOD_LIST:
-        bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
-        return
-    if user_id in ADMIN_LIST:
-        user_id = int(target)
-    else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
-        return
+    if target:
+        if not target.isdigit() or not int(target) in MOD_LIST:
+            bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+            return
+        if user_id in ADMIN_LIST:
+            user_id = int(target)
+        else:
+            bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+            return
 
     if user_id in MOD_LIST:
         pending = backend.open_json('pending.json')
