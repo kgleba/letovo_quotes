@@ -1,5 +1,6 @@
 import os
 import time
+from functools import wraps
 from threading import Thread
 import schedule
 import telebot
@@ -7,10 +8,10 @@ from flask import Flask, request
 import backend
 
 TOKEN = os.getenv('BOT_TOKEN')
-POST_TIME = os.getenv('POST_TIME').split()
+POST_TIME = os.getenv('POST_TIME', '').split()
 
 CHANNEL_ID = '@letovo_quotes'
-MOD_ID = -1001791070494
+ADMIN_ID = -1001791070494
 VOTING_ID = -1001645253084
 DISCUSSION_ID = -1001742201177
 
@@ -37,11 +38,43 @@ def format_time(raw):
     return time.strftime('%H:%M:%S', time.gmtime(raw))
 
 
+def mod_feature(func):
+    @wraps(func)
+    def wrapper(message, *args, **kwargs):
+        if message.from_user.id not in MOD_LIST:
+            bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+            return
+        return func(message, *args, **kwargs)
+
+    return wrapper
+
+
+def admin_feature(func):
+    @wraps(func)
+    def wrapper(message, *args, **kwargs):
+        if message.chat.id != ADMIN_ID:
+            bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+            return
+        return func(message, *args, **kwargs)
+
+    return wrapper
+
+
+def private_chat(func):
+    @wraps(func)
+    def wrapper(message, *args, **kwargs):
+        if message.chat.id in (DISCUSSION_ID, VOTING_ID):
+            return
+        return func(message, *args, **kwargs)
+
+    return wrapper
+
+
 def publish_quote():
     queue = backend.open_json('queue.json')
 
     if not queue:
-        bot.send_message(MOD_ID, text='Цитаты в очереди закончились! :(')
+        bot.send_message(ADMIN_ID, text='Цитаты в очереди закончились! :(')
         return
 
     bot.send_message(CHANNEL_ID, text=queue['0'])
@@ -176,10 +209,8 @@ def quote_verdict():
 
 
 @bot.message_handler(commands=['start'])
+@private_chat
 def greetings(message):
-    if message.chat.id == DISCUSSION_ID:
-        return
-
     bot.send_message(message.chat.id,
                      'Привет! Сюда ты можешь предлагать цитаты для публикации в канале "Забавные цитаты Летово". Если ты вдруг еще не подписан - держи ссылку: '
                      'https://t.me/letovo_quotes. Никаких ограничений - предлагай все, что покажется тебе смешным (с помощью команды /suggest), главное, укажи автора цитаты :)')
@@ -187,10 +218,8 @@ def greetings(message):
 
 
 @bot.message_handler(commands=['suggest'])
+@private_chat
 def suggest(message):
-    if message.chat.id == DISCUSSION_ID:
-        return
-
     quote = backend.reformat_quote(message.text[9:])
 
     if quote:
@@ -203,10 +232,8 @@ def suggest(message):
 
 
 @bot.message_handler(commands=['help'])
+@private_chat
 def bot_help(message):
-    if message.chat.id == DISCUSSION_ID:
-        return
-
     user_help = '<b>Пользовательские команды:</b>\n/start – запуск бота\n/help – вызов этого сообщения\n' \
                 '/suggest – предложить цитату\n/suggest_rollback – откатить последнюю предложенную цитату'
     mod_help = '<b>Админские команды:</b>\n/ban [id]; [reason]; [duration in sec, 3600 by default] – блокировка пользователя\n/unban [id]; [reason] - разблокировка пользователя\n' \
@@ -219,17 +246,15 @@ def bot_help(message):
 
     bot.send_message(message.chat.id, user_help, parse_mode='HTML')
 
-    if message.chat.id == MOD_ID:
+    if message.chat.id == ADMIN_ID:
         bot.send_message(message.chat.id, mod_help + admin_help, parse_mode='HTML')
     elif message.from_user.id in MOD_LIST:
         bot.send_message(message.chat.id, mod_help, parse_mode='HTML')
 
 
 @bot.message_handler(commands=['suggest_rollback'])
+@private_chat
 def suggest_rollback(message):
-    if message.chat.id == DISCUSSION_ID:
-        return
-
     pending = backend.open_json('pending.json')
 
     for counter, sent_quote in reversed(pending.items()):
@@ -250,14 +275,14 @@ def suggest_rollback(message):
 
 
 @bot.message_handler(commands=['verdict'])
+@admin_feature
+@private_chat
 def instant_quote_verdict(message):
-    if message.chat.id == MOD_ID:
-        quote_verdict()
-    else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+    quote_verdict()
 
 
 @bot.message_handler(commands=['not_voted'])
+@private_chat
 def not_voted_quotes(message):
     user_id = message.from_user.id
     target = message.text[11:]
@@ -289,162 +314,157 @@ def not_voted_quotes(message):
 
 
 @bot.message_handler(commands=['ban'])
+@mod_feature
+@private_chat
 def ban(message):
-    if message.from_user.id in MOD_LIST:
-        args = message.text[5:].split('; ')
+    args = message.text[5:].split('; ')
 
-        if len(args) == 3:
-            user_id, reason, period = args[0], args[1], args[2]
+    if len(args) == 3:
+        user_id, reason, period = args[0], args[1], args[2]
 
-            if not period.isdigit():
-                bot.send_message(message.chat.id, 'Введи корректное значение срока блокировки!')
-                return
-        elif len(args) == 2:
-            user_id, reason = args[0], args[1]
-            period = BAN_TIME
-        else:
-            bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+        if not period.isdigit():
+            bot.send_message(message.chat.id, 'Введи корректное значение срока блокировки!')
             return
-
-        if not user_id.isdigit():
-            bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
-            return
-
-        banned_log = bot.send_message(MOD_ID,
-                                      f'Модератор @{message.from_user.username} заблокировал пользователя {user_id} на {period} секунд по причине "{reason}"')
-        bot.pin_chat_message(MOD_ID, banned_log.message_id)
-
-        banlist = backend.open_json('banlist.json')
-        banlist.update({user_id: int(time.time()) + int(period)})
-        backend.save_json(banlist, 'banlist.json')
-
-        bot.send_message(user_id, f'Ты был заблокирован по причине {reason}. Оставшееся время блокировки: {format_time(int(period))}')
-        bot.send_message(message.chat.id, f'Пользователь {user_id} успешно заблокирован!')
+    elif len(args) == 2:
+        user_id, reason = args[0], args[1]
+        period = BAN_TIME
     else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+        return
+
+    if not user_id.isdigit():
+        bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
+        return
+
+    banned_log = bot.send_message(ADMIN_ID,
+                                  f'Модератор @{message.from_user.username} заблокировал пользователя {user_id} на {period} секунд по причине "{reason}"')
+    bot.pin_chat_message(ADMIN_ID, banned_log.message_id)
+
+    banlist = backend.open_json('banlist.json')
+    banlist.update({user_id: int(time.time()) + int(period)})
+    backend.save_json(banlist, 'banlist.json')
+
+    bot.send_message(user_id, f'Ты был заблокирован по причине {reason}. Оставшееся время блокировки: {format_time(int(period))}')
+    bot.send_message(message.chat.id, f'Пользователь {user_id} успешно заблокирован!')
 
 
 @bot.message_handler(commands=['unban'])
+@mod_feature
+@private_chat
 def unban(message):
-    if message.from_user.id in MOD_LIST:
-        args = message.text[7:].split('; ')
+    # if message.from_user.id in MOD_LIST:
+    args = message.text[7:].split('; ')
 
-        if len(args) >= 2:
-            user_id, reason = args
-            if not user_id.isdigit():
-                bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
-                return
-        else:
+    if len(args) >= 2:
+        user_id, reason = args
+        if not user_id.isdigit():
             bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
             return
-
-        banlist = backend.open_json('banlist.json')
-
-        if user_id not in banlist:
-            bot.send_message(message.chat.id, f'Пользователь {user_id} не заблокирован!')
-            return
-
-        banlist.pop(user_id)
-
-        bot.send_message(message.chat.id, f'Пользователь {user_id} успешно разблокирован!')
-        banned_log = bot.send_message(MOD_ID,
-                                      f'Модератор @{message.from_user.username} разблокировал пользователя {user_id} по причине "{reason}"')
-        bot.pin_chat_message(MOD_ID, banned_log.message_id)
-
-        backend.save_json(banlist, 'banlist.json')
     else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+        return
+
+    banlist = backend.open_json('banlist.json')
+
+    if user_id not in banlist:
+        bot.send_message(message.chat.id, f'Пользователь {user_id} не заблокирован!')
+        return
+
+    banlist.pop(user_id)
+
+    bot.send_message(message.chat.id, f'Пользователь {user_id} успешно разблокирован!')
+    banned_log = bot.send_message(ADMIN_ID,
+                                  f'Модератор @{message.from_user.username} разблокировал пользователя {user_id} по причине "{reason}"')
+    bot.pin_chat_message(ADMIN_ID, banned_log.message_id)
+
+    backend.save_json(banlist, 'banlist.json')
 
 
 @bot.message_handler(commands=['push'])
+@admin_feature
+@private_chat
 def add_queue(message):
-    if message.chat.id == MOD_ID:
-        quote = message.text[6:]
+    quote = message.text[6:]
 
-        if quote:
-            queue = backend.open_json('queue.json')
-
-            queue.update({str(len(queue)): quote})
-
-            bot.send_message(MOD_ID, 'Успешно занес цитату в очередь публикации!')
-
-            backend.save_json(queue, 'queue.json')
-        else:
-            bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
-            return
-    else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
-
-
-@bot.message_handler(commands=['get'])
-def get_queue(message):
-    if message.from_user.id in MOD_LIST:
+    if quote:
         queue = backend.open_json('queue.json')
 
-        if not queue:
-            bot.send_message(message.chat.id, 'Очередь публикации пуста!')
-            return
+        queue.update({str(len(queue)): quote})
 
-        for quote_id, quote in queue.items():
-            bot.send_message(message.chat.id, f'#{quote_id}\n{quote}')
-    else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
-
-
-@bot.message_handler(commands=['get_banlist'])
-def get_banlist(message):
-    if message.from_user.id in MOD_LIST:
-        banlist = backend.open_json('banlist.json')
-
-        if not banlist:
-            bot.send_message(message.chat.id, 'Список заблокированных пользователей пуст!')
-            return
-
-        bot.send_message(message.chat.id, 'ID пользователя: время разблокировки')
-
-        for key, value in banlist.items():
-            bot.send_message(message.chat.id, key + ': ' + format_time(int(value)))
-    else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
-
-
-@bot.message_handler(commands=['delete'])
-def del_quote(message):
-    if message.chat.id == MOD_ID:
-        quote_id = message.text[8:]
-
-        queue = backend.open_json('queue.json')
-
-        if quote_id not in queue:
-            bot.send_message(message.chat.id, 'Цитаты с таким номером не существует!')
-            return
-
-        for key in range(int(quote_id), len(queue) - 1):
-            queue[str(key)] = queue[str(key + 1)]
-        queue.pop(str(len(queue) - 1))
-
-        bot.send_message(MOD_ID, f'Успешно удалил цитату с номером {quote_id}!')
+        bot.send_message(ADMIN_ID, 'Успешно занес цитату в очередь публикации!')
 
         backend.save_json(queue, 'queue.json')
     else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+        bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
+        return
 
 
-@bot.message_handler(commands=['clear_queue'])
+@bot.message_handler(commands=['get'])
+@mod_feature
+@private_chat
+def get_queue(message):
+    queue = backend.open_json('queue.json')
+
+    if not queue:
+        bot.send_message(message.chat.id, 'Очередь публикации пуста!')
+        return
+
+    for quote_id, quote in queue.items():
+        bot.send_message(message.chat.id, f'#{quote_id}\n{quote}')
+
+
+@bot.message_handler(commands=['get_banlist'])
+@mod_feature
+@private_chat
+def get_banlist(message):
+    banlist = backend.open_json('banlist.json')
+
+    if not banlist:
+        bot.send_message(message.chat.id, 'Список заблокированных пользователей пуст!')
+        return
+
+    bot.send_message(message.chat.id, 'ID пользователя: время разблокировки')
+
+    for key, value in banlist.items():
+        bot.send_message(message.chat.id, key + ': ' + format_time(int(value)))
+
+
+@bot.message_handler(commands=['delete'])
+@admin_feature
+@private_chat
+def del_quote(message):
+    quote_id = message.text[8:]
+
+    queue = backend.open_json('queue.json')
+
+    if quote_id not in queue:
+        bot.send_message(message.chat.id, 'Цитаты с таким номером не существует!')
+        return
+
+    for key in range(int(quote_id), len(queue) - 1):
+        queue[str(key)] = queue[str(key + 1)]
+    queue.pop(str(len(queue) - 1))
+
+    bot.send_message(ADMIN_ID, f'Успешно удалил цитату с номером {quote_id}!')
+
+    backend.save_json(queue, 'queue.json')
+
+
+@bot.message_handler(commands=['clear'])
+@admin_feature
+@private_chat
 def clear_queue(message):
-    if message.chat.id == MOD_ID:
-        keyboard = telebot.types.InlineKeyboardMarkup()
-        keyboard.add(telebot.types.InlineKeyboardButton(text='➕ Да', callback_data='clear: yes'))
-        keyboard.add(telebot.types.InlineKeyboardButton(text='➖ Нет', callback_data='clear: no'))
+    keyboard = telebot.types.InlineKeyboardMarkup()
+    keyboard.add(telebot.types.InlineKeyboardButton(text='➕ Да', callback_data='clear: yes'))
+    keyboard.add(telebot.types.InlineKeyboardButton(text='➖ Нет', callback_data='clear: no'))
 
-        bot.send_message(MOD_ID, 'Ты уверен в том, что хочешь очистить очередь публикаций?', reply_markup=keyboard)
-    else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+    bot.send_message(ADMIN_ID, 'Ты уверен в том, что хочешь очистить очередь публикаций?', reply_markup=keyboard)
 
 
 @bot.message_handler(commands=['edit'])
+@private_chat
 def edit_quote(message):
-    if message.chat.id == MOD_ID:
+    if message.chat.id == ADMIN_ID:
         args = message.text[6:].split('; ')
 
         if len(args) == 2:
@@ -454,14 +474,14 @@ def edit_quote(message):
             if quote_id in queue.keys():
                 queue[quote_id] = new_text
             else:
-                bot.send_message(MOD_ID, 'Цитаты с таким номером не существует!')
+                bot.send_message(ADMIN_ID, 'Цитаты с таким номером не существует!')
                 return
 
-            bot.send_message(MOD_ID, f'Успешно изменил цитату под номером {quote_id}!')
+            bot.send_message(ADMIN_ID, f'Успешно изменил цитату под номером {quote_id}!')
 
             backend.save_json(queue, 'queue.json')
         else:
-            bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
+            bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
             return
     elif message.chat.id == VOTING_ID:
         pending = backend.open_json('pending.json')
@@ -484,56 +504,54 @@ def edit_quote(message):
 
 
 @bot.message_handler(commands=['swap'])
+@admin_feature
+@private_chat
 def swap_queue(message):
-    if message.chat.id == MOD_ID:
-        args = message.text[6:].split('; ')
+    args = message.text[6:].split('; ')
 
-        if len(args) == 2:
-            queue = backend.open_json('queue.json')
+    if len(args) == 2:
+        queue = backend.open_json('queue.json')
 
-            if args[0] in queue and args[1] in queue:
-                queue[args[0]], queue[args[1]] = queue[args[1]], queue[args[0]]
+        if args[0] in queue and args[1] in queue:
+            queue[args[0]], queue[args[1]] = queue[args[1]], queue[args[0]]
 
-                bot.send_message(MOD_ID, 'Успешно поменял цитаты местами в очереди!')
-            else:
-                bot.send_message(MOD_ID, 'Цитаты с таким номером не существует!')
-                return
-
-            backend.save_json(queue, 'queue.json')
+            bot.send_message(ADMIN_ID, 'Успешно поменял цитаты местами в очереди!')
         else:
-            bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
+            bot.send_message(ADMIN_ID, 'Цитаты с таким номером не существует!')
             return
+
+        backend.save_json(queue, 'queue.json')
     else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+        bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
+        return
 
 
 @bot.message_handler(commands=['insert'])
+@admin_feature
+@private_chat
 def insert_quote(message):
-    if message.chat.id == MOD_ID:
-        args = message.text[8:].split('; ')
+    args = message.text[8:].split('; ')
 
-        if len(args) == 2:
-            queue = backend.open_json('queue.json')
+    if len(args) == 2:
+        queue = backend.open_json('queue.json')
 
-            if args[0] in queue:
-                current_quote = queue[args[0]]
-                for key in range(int(args[0]) + 1, len(queue) + 1):
-                    next_quote = queue.get(str(key))
-                    queue[str(key)] = current_quote
-                    current_quote = next_quote
+        if args[0] in queue:
+            current_quote = queue[args[0]]
+            for key in range(int(args[0]) + 1, len(queue) + 1):
+                next_quote = queue.get(str(key))
+                queue[str(key)] = current_quote
+                current_quote = next_quote
 
-                queue[args[0]] = args[1]
+            queue[args[0]] = args[1]
 
-                bot.send_message(MOD_ID, 'Успешно вставил цитату в очередь!')
-            else:
-                bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
-
-            backend.save_json(queue, 'queue.json')
+            bot.send_message(ADMIN_ID, 'Успешно вставил цитату в очередь!')
         else:
-            bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
-            return
+            bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+
+        backend.save_json(queue, 'queue.json')
     else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+        bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
+        return
 
 
 @bot.message_handler(content_types=['text'])
@@ -590,6 +608,7 @@ def button_handler(call):
                 bot.answer_callback_query(call.id, 'Спасибо за голос!')
 
                 pending[actual_quote_id]['reputation']['-'].append(call.from_user.id)
+
         elif action[0] == 'reject' and call.from_user.id in ADMIN_LIST:
             rejected = backend.open_json('rejected.json')
 
@@ -610,9 +629,9 @@ def button_handler(call):
 
     elif call.data == 'clear: yes':
         backend.save_json({}, 'queue.json')
-        bot.edit_message_text('Успешно очистил очередь публикаций!', MOD_ID, call.message.id, reply_markup=None)
+        bot.edit_message_text('Успешно очистил очередь публикаций!', ADMIN_ID, call.message.id, reply_markup=None)
     elif call.data == 'clear: no':
-        bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID, call.message.id,
+        bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', ADMIN_ID, call.message.id,
                               reply_markup=None)
 
     bot.answer_callback_query(call.id)
