@@ -282,6 +282,7 @@ def instant_quote_verdict(message):
 
 
 @bot.message_handler(commands=['not_voted'])
+@mod_feature
 @private_chat
 def not_voted_quotes(message):
     user_id = message.from_user.id
@@ -297,20 +298,17 @@ def not_voted_quotes(message):
             bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
             return
 
-    if user_id in MOD_LIST:
-        pending = backend.open_json('pending.json')
-        result = ''
+    pending = backend.open_json('pending.json')
+    result = ''
 
-        for quote in pending.values():
-            if user_id not in quote['reputation']['+'] + quote['reputation']['-']:
-                result += f'https://t.me/c/{str(VOTING_ID)[3:]}/{quote["message_id"]}\n'
+    for quote in pending.values():
+        if user_id not in quote['reputation']['+'] + quote['reputation']['-']:
+            result += f'https://t.me/c/{str(VOTING_ID)[3:]}/{quote["message_id"]}\n'
 
-        if result:
-            bot.send_message(message.chat.id, 'Ты не проголосовал за следующие цитаты:\n' + result)
-        else:
-            bot.send_message(message.chat.id, 'Ты за всё проголосовал! Так держать!')
+    if result:
+        bot.send_message(message.chat.id, 'Ты не проголосовал за следующие цитаты:\n' + result)
     else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'Ты за всё проголосовал! Так держать!')
 
 
 @bot.message_handler(commands=['ban'])
@@ -352,7 +350,6 @@ def ban(message):
 @mod_feature
 @private_chat
 def unban(message):
-    # if message.from_user.id in MOD_LIST:
     args = message.text[7:].split('; ')
 
     if len(args) >= 2:
