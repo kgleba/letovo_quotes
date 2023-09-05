@@ -70,6 +70,15 @@ def private_chat(func):
     return wrapper
 
 
+def arg_parse(func):
+    @wraps(func)
+    def wrapper(message, *args, **kwargs):
+        params = message.text[len(func.__name__) + 2:].split('; ')
+        return func(message, params, *args, **kwargs)
+
+    return wrapper
+
+
 def publish_quote():
     queue = backend.open_json('queue.json')
 
@@ -165,10 +174,10 @@ def quote_verdict():
         reputation = len(quote['reputation']['+']) - len(quote['reputation']['-'])
 
         if len(quote['reputation']['+']) + len(quote['reputation']['-']) < MIN_VOTES:
-            not_voted = set(MOD_LIST) - set(quote['reputation']['+'] + quote['reputation']['-'])
-            if not_voted:
+            not_voted_quotes = set(MOD_LIST) - set(quote['reputation']['+'] + quote['reputation']['-'])
+            if not_voted_quotes:
                 sent_notif = bot.send_message(VOTING_ID, 'Цитата не набрала нужного количества голосов. '
-                                              + ' '.join(MOD_LIST[mod] for mod in not_voted)
+                                              + ' '.join(MOD_LIST[mod] for mod in not_voted_quotes)
                                               + ', проголосуйте за нее, пожалуйста!',
                                               disable_notification=True, reply_to_message_id=message_id)
                 voting_notif_ids.append(sent_notif.message_id)
@@ -219,9 +228,10 @@ def start(message):
 
 
 @bot.message_handler(commands=['suggest'])
+@arg_parse
 @private_chat
-def suggest(message):
-    quote = backend.reformat_quote(message.text[9:])
+def suggest(message, args):
+    quote = backend.reformat_quote(args[0])
 
     if quote:
         handle_quote(message, quote)
@@ -283,11 +293,12 @@ def verdict(message):
 
 
 @bot.message_handler(commands=['not_voted'])
+@arg_parse
 @mod_feature
 @private_chat
-def not_voted(message):
+def not_voted(message, args):
     user_id = message.from_user.id
-    target = message.text[11:]
+    target = args[0]
 
     if target:
         if not target.isdigit() or int(target) not in MOD_LIST:
@@ -313,11 +324,10 @@ def not_voted(message):
 
 
 @bot.message_handler(commands=['ban'])
+@arg_parse
 @mod_feature
 @private_chat
-def ban(message):
-    args = message.text[5:].split('; ')
-
+def ban(message, args):
     if len(args) == 3:
         user_id, reason, period = args
 
@@ -348,11 +358,10 @@ def ban(message):
 
 
 @bot.message_handler(commands=['unban'])
+@arg_parse
 @mod_feature
 @private_chat
-def unban(message):
-    args = message.text[7:].split('; ')
-
+def unban(message, args):
     if len(args) >= 2:
         user_id, reason = args
         if not user_id.isdigit():
@@ -379,10 +388,11 @@ def unban(message):
 
 
 @bot.message_handler(commands=['push'])
+@arg_parse
 @admin_feature
 @private_chat
-def push(message):
-    quote = message.text[6:]
+def push(message, args):
+    quote = args[0]
 
     if not quote:
         bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
@@ -427,10 +437,11 @@ def get_banlist(message):
 
 
 @bot.message_handler(commands=['delete'])
+@arg_parse
 @admin_feature
 @private_chat
-def delete(message):
-    quote_id = message.text[8:]
+def delete(message, args):
+    quote_id = args[0]
 
     queue = backend.open_json('queue.json')
 
@@ -448,11 +459,10 @@ def delete(message):
 
 
 @bot.message_handler(commands=['edit'])
+@arg_parse
 @private_chat
-def edit(message):
+def edit(message, args):
     if message.chat.id == ADMIN_ID:
-        args = message.text[6:].split('; ')
-
         if len(args) == 2:
             quote_id, new_text = args
             queue = backend.open_json('queue.json')
@@ -472,7 +482,7 @@ def edit(message):
     elif message.chat.id == VOTING_ID:
         pending = backend.open_json('pending.json')
 
-        quote = backend.reformat_quote(message.text[6:])
+        quote = backend.reformat_quote(args[0])
         source = message.reply_to_message.text.split('\n')
 
         for key, value in pending.items():
@@ -490,11 +500,10 @@ def edit(message):
 
 
 @bot.message_handler(commands=['swap'])
+@arg_parse
 @admin_feature
 @private_chat
-def swap(message):
-    args = message.text[6:].split('; ')
-
+def swap(message, args):
     if len(args) != 2:
         bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
         return
@@ -514,16 +523,15 @@ def swap(message):
 
 
 @bot.message_handler(commands=['insert'])
+@arg_parse
 @admin_feature
 @private_chat
-def insert(message):
-    args = message.text[8:].split('; ')
-
+def insert(message, args):
     if len(args) != 2 or not args[0].isdigit():
         bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
         return
 
-    quote_id, quote=args
+    quote_id, quote = args
     queue = backend.open_json('queue.json')
 
     if quote_id in queue:
