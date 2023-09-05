@@ -211,7 +211,7 @@ def quote_verdict():
 
 @bot.message_handler(commands=['start'])
 @private_chat
-def greetings(message):
+def start(message):
     bot.send_message(message.chat.id,
                      'Привет! Сюда ты можешь предлагать цитаты для публикации в канале "Забавные цитаты Летово". Если ты вдруг еще не подписан - держи ссылку: '
                      'https://t.me/letovo_quotes. Никаких ограничений - предлагай все, что покажется тебе смешным (с помощью команды /suggest), главное, укажи автора цитаты :)')
@@ -234,7 +234,7 @@ def suggest(message):
 
 @bot.message_handler(commands=['help'])
 @private_chat
-def bot_help(message):
+def help(message):
     user_help = '<b>Пользовательские команды:</b>\n/start – запуск бота\n/help – вызов этого сообщения\n' \
                 '/suggest – предложить цитату\n/suggest_rollback – откатить последнюю предложенную цитату'
     mod_help = '<b>Админские команды:</b>\n/ban [id]; [reason]; [duration in sec, 3600 by default] – блокировка пользователя\n/unban [id]; [reason] - разблокировка пользователя\n' \
@@ -278,14 +278,14 @@ def suggest_rollback(message):
 @bot.message_handler(commands=['verdict'])
 @admin_feature
 @private_chat
-def instant_quote_verdict(message):
+def verdict(message):
     quote_verdict()
 
 
 @bot.message_handler(commands=['not_voted'])
 @mod_feature
 @private_chat
-def not_voted_quotes(message):
+def not_voted(message):
     user_id = message.from_user.id
     target = message.text[11:]
 
@@ -381,7 +381,7 @@ def unban(message):
 @bot.message_handler(commands=['push'])
 @admin_feature
 @private_chat
-def add_queue(message):
+def push(message):
     quote = message.text[6:]
 
     if not quote:
@@ -399,7 +399,7 @@ def add_queue(message):
 @bot.message_handler(commands=['get'])
 @mod_feature
 @private_chat
-def get_queue(message):
+def get(message):
     queue = backend.open_json('queue.json')
 
     if not queue:
@@ -429,7 +429,7 @@ def get_banlist(message):
 @bot.message_handler(commands=['delete'])
 @admin_feature
 @private_chat
-def del_quote(message):
+def delete(message):
     quote_id = message.text[8:]
 
     queue = backend.open_json('queue.json')
@@ -449,7 +449,7 @@ def del_quote(message):
 
 @bot.message_handler(commands=['edit'])
 @private_chat
-def edit_quote(message):
+def edit(message):
     if message.chat.id == ADMIN_ID:
         args = message.text[6:].split('; ')
 
@@ -492,7 +492,7 @@ def edit_quote(message):
 @bot.message_handler(commands=['swap'])
 @admin_feature
 @private_chat
-def swap_queue(message):
+def swap(message):
     args = message.text[6:].split('; ')
 
     if len(args) != 2:
@@ -516,7 +516,7 @@ def swap_queue(message):
 @bot.message_handler(commands=['insert'])
 @admin_feature
 @private_chat
-def insert_quote(message):
+def insert(message):
     args = message.text[8:].split('; ')
 
     if len(args) != 2 or not args[0].isdigit():
