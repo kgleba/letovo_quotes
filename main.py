@@ -121,37 +121,37 @@ def handle_quote(message, quote):
 
     banlist = backend.open_json('banlist.json')
 
-    if author_id in banlist and int(time.time()) > banlist[author_id]:
-        banlist.pop(author_id)
-        backend.save_json(banlist, 'banlist.json')
-
-    if author_id not in banlist:
-        bot.send_message(message.chat.id, 'Принято! Отправил твою цитату в предложку :)')
-
-        if pending:
-            call_count = max(map(int, pending)) + 1
+    if author_id in banlist:
+        if int(time.time()) > banlist[author_id]:
+            banlist.pop(author_id)
+            backend.save_json(banlist, 'banlist.json')
         else:
-            call_count = 0
+            bot.send_message(message.chat.id,
+                             f'Ты был заблокирован, поэтому не можешь предлагать цитаты. Оставшееся время блокировки: {format_time(banlist[author_id] - int(time.time()))}')
+            return
 
-        keyboard = telebot.types.InlineKeyboardMarkup()
-        keyboard.add(telebot.types.InlineKeyboardButton(text='➕ За', callback_data=f'upvote: {call_count}'))
-        keyboard.add(telebot.types.InlineKeyboardButton(text='➖ Против', callback_data=f'downvote: {call_count}'))
-        keyboard.add(telebot.types.InlineKeyboardButton(text='🚫 Отклонить (только администраторы)',
-                                                        callback_data=f'reject: {call_count}'))
+    bot.send_message(message.chat.id, 'Принято! Отправил твою цитату в предложку :)')
 
-        sent_quote = bot.send_message(VOTING_ID,
-                                      f'Пользователь @{author_name} [ID: {author_id}] предложил следующую цитату:\n\n{quote}',
-                                      reply_markup=keyboard)
-
-        pending.update(
-            {call_count: {'text': quote, 'message_id': sent_quote.message_id, 'author': [author_id, author_name],
-                          'source': [message.chat.id, message.id], 'reputation': {'+': [], '-': []}}})
-
-        backend.save_json(pending, 'pending.json')
+    if pending:
+        call_count = max(map(int, pending)) + 1
     else:
-        bot.send_message(message.chat.id,
-                         f'Ты был заблокирован, поэтому не можешь предлагать цитаты. Оставшееся время блокировки: {format_time(banlist[author_id] - int(time.time()))}')
-        return
+        call_count = 0
+
+    keyboard = telebot.types.InlineKeyboardMarkup()
+    keyboard.add(telebot.types.InlineKeyboardButton(text='➕ За', callback_data=f'upvote: {call_count}'))
+    keyboard.add(telebot.types.InlineKeyboardButton(text='➖ Против', callback_data=f'downvote: {call_count}'))
+    keyboard.add(telebot.types.InlineKeyboardButton(text='🚫 Отклонить (только администраторы)',
+                                                    callback_data=f'reject: {call_count}'))
+
+    sent_quote = bot.send_message(VOTING_ID,
+                                  f'Пользователь @{author_name} [ID: {author_id}] предложил следующую цитату:\n\n{quote}',
+                                  reply_markup=keyboard)
+
+    pending.update(
+        {call_count: {'text': quote, 'message_id': sent_quote.message_id, 'author': [author_id, author_name],
+                      'source': [message.chat.id, message.id], 'reputation': {'+': [], '-': []}}})
+
+    backend.save_json(pending, 'pending.json')
 
 
 def quote_verdict():
@@ -228,10 +228,9 @@ def start(message):
 
 
 @bot.message_handler(commands=['suggest'])
-@arg_parse
 @private_chat
-def suggest(message, args):
-    quote = backend.reformat_quote(args[0])
+def suggest(message):
+    quote = backend.reformat_quote(message.text[9:])
 
     if quote:
         handle_quote(message, quote)
@@ -446,7 +445,7 @@ def delete(message, args):
     queue = backend.open_json('queue.json')
 
     if quote_id not in queue:
-        bot.send_message(message.chat.id, 'Цитаты с таким номером не существует!')
+        bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
         return
 
     for key in range(int(quote_id), len(queue) - 1):
@@ -470,7 +469,7 @@ def edit(message, args):
             if quote_id in queue.keys():
                 queue[quote_id] = new_text
             else:
-                bot.send_message(ADMIN_ID, 'Цитаты с таким номером не существует!')
+                bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
                 return
 
             bot.send_message(ADMIN_ID, f'Успешно изменил цитату под номером {quote_id}!')
@@ -516,7 +515,7 @@ def swap(message, args):
 
         bot.send_message(ADMIN_ID, 'Успешно поменял цитаты местами в очереди!')
     else:
-        bot.send_message(ADMIN_ID, 'Цитаты с таким номером не существует!')
+        bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
         return
 
     backend.save_json(queue, 'queue.json')
@@ -534,18 +533,18 @@ def insert(message, args):
     quote_id, quote = args
     queue = backend.open_json('queue.json')
 
-    if quote_id in queue:
-        current_quote = queue[quote_id]
-        for key in range(int(quote_id) + 1, len(queue) + 1):
-            next_quote = queue.get(str(key))
-            queue[str(key)] = current_quote
-            current_quote = next_quote
-
-        queue[quote_id] = quote
-
-        bot.send_message(ADMIN_ID, 'Успешно вставил цитату в очередь!')
-    else:
+    if quote_id not in queue:
         bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+        return
+
+    current_quote = queue[quote_id]
+    for key in range(int(quote_id) + 1, len(queue) + 1):
+        next_quote = queue.get(str(key))
+        queue[str(key)] = current_quote
+        current_quote = next_quote
+
+    queue[quote_id] = quote
+    bot.send_message(ADMIN_ID, 'Успешно вставил цитату в очередь!')
 
     backend.save_json(queue, 'queue.json')
 
@@ -566,65 +565,64 @@ def text_handler(message):
 def button_handler(call):
     action = call.data.split(':')
 
-    if action[0] in ['upvote', 'downvote', 'reject']:
-        pending = backend.open_json('pending.json')
+    if action[0] not in ('upvote', 'downvote', 'reject'):
+        return
 
-        quote_id = action[1].replace(' ', '')
+    pending = backend.open_json('pending.json')
 
-        if quote_id not in pending:
-            bot.reply_to(call.message,
-                         'Возникла проблема с обработкой цитаты :( Если это необходимо, проведи ее вручную.')
+    quote_id = action[1].replace(' ', '')
+
+    if quote_id not in pending:
+        bot.reply_to(call.message,
+                     'Возникла проблема с обработкой цитаты :( Если это необходимо, проведи ее вручную.')
+        return
+
+    author_id = pending[quote_id]['source'][0]
+    source_id = pending[quote_id]['source'][1]
+    moderator_id = call.from_user.id
+    reputation = pending[quote_id]['reputation']
+
+    match action[0]:
+        case 'upvote':
+            current_vote, opposite_vote = ('+', 'за'), ('-', 'против')
+        case 'downvote':
+            current_vote, opposite_vote = ('-', 'против'), ('+', 'за')
+        case _:
+            current_vote, opposite_vote = ('', ''), ('', '')
+
+    if action[0] in ('upvote', 'downvote'):
+        if moderator_id in reputation[current_vote[0]]:
+            bot.answer_callback_query(call.id, f'Ты уже проголосовал "{current_vote[1]}"!')
             return
 
-        author_id = pending[quote_id]['source'][0]
-        source_id = pending[quote_id]['source'][1]
-        moderator_id = call.from_user.id
-        reputation = pending[quote_id]['reputation']
+        if moderator_id in reputation[opposite_vote[0]]:
+            pending[quote_id]['reputation'][opposite_vote[0]].remove(call.from_user.id)
+            bot.answer_callback_query(call.id, f'Успешно поменял твой голос с "{opposite_vote[1]}" на "{current_vote[1]}"!')
 
-        if action[0] == 'upvote' or action[0] == 'downvote':
-            if action[0] == 'upvote':
-                if moderator_id in reputation['-']:
-                    pending[quote_id]['reputation']['-'].remove(call.from_user.id)
-                    bot.answer_callback_query(call.id, 'Успешно поменял твой голос с "против" на "за"!')
-                elif moderator_id in reputation['+']:
-                    bot.answer_callback_query(call.id, 'Ты уже проголосовал "за"!')
-                    return
+        bot.answer_callback_query(call.id, 'Спасибо за голос!')
 
-                bot.answer_callback_query(call.id, 'Спасибо за голос!')
+        pending[quote_id]['reputation'][current_vote[0]].append(call.from_user.id)
 
-                pending[quote_id]['reputation']['+'].append(call.from_user.id)
-            else:
-                if moderator_id in reputation['+']:
-                    pending[quote_id]['reputation']['+'].remove(call.from_user.id)
-                    bot.answer_callback_query(call.id, 'Успешно поменял твой голос с "за" на "против"!')
-                elif moderator_id in reputation['-']:
-                    bot.answer_callback_query(call.id, 'Ты уже проголосовал "против"!')
-                    return
+    elif action[0] == 'reject' and call.from_user.id in ADMIN_LIST:
+        rejected = backend.open_json('rejected.json')
 
-                bot.answer_callback_query(call.id, 'Спасибо за голос!')
+        bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', VOTING_ID,
+                              call.message.id, reply_markup=None)
+        try:
+            bot.send_message(author_id, 'Твоя цитата была отклонена :(', reply_to_message_id=source_id)
+        except telebot.apihelper.ApiTelegramException:
+            bot.send_message(author_id, 'Твоя цитата была отклонена :(')
 
-                pending[quote_id]['reputation']['-'].append(call.from_user.id)
+        if rejected:
+            rejected.update({str(max(map(int, rejected)) + 1): call.message.text})
+        else:
+            rejected.update({'0': call.message.text})
 
-        elif action[0] == 'reject' and call.from_user.id in ADMIN_LIST:
-            rejected = backend.open_json('rejected.json')
+        backend.save_json(rejected, 'rejected.json')
 
-            bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', VOTING_ID,
-                                  call.message.id, reply_markup=None)
-            try:
-                bot.send_message(author_id, 'Твоя цитата была отклонена :(', reply_to_message_id=source_id)
-            except telebot.apihelper.ApiTelegramException:
-                bot.send_message(author_id, 'Твоя цитата была отклонена :(')
+        pending.pop(quote_id)
 
-            if rejected:
-                rejected.update({str(max(map(int, rejected)) + 1): call.message.text})
-            else:
-                rejected.update({'0': call.message.text})
-
-            backend.save_json(rejected, 'rejected.json')
-
-            pending.pop(quote_id)
-
-        backend.save_json(pending, 'pending.json')
+    backend.save_json(pending, 'pending.json')
 
     bot.answer_callback_query(call.id)
 
