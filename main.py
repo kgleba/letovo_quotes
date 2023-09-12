@@ -114,11 +114,11 @@ def handle_quote(message, quote):
                              f'Ты был заблокирован, поэтому не можешь предлагать цитаты. Оставшееся время блокировки: {format_time(banlist[author_id] - int(time.time()))}')
             return
 
-    if quote.find('#') == -1:
+    if '#' not in quote:
         bot.send_message(message.chat.id, 'Цитата должна содержать хештег!')
         return
 
-    if len(quote) > 500:
+    if len(quote) >= 500:
         bot.send_message(message.chat.id, 'Отправленная цитата слишком большая!')
         return
 
