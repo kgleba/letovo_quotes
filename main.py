@@ -1,5 +1,6 @@
 import os
 import time
+from functools import wraps
 from threading import Thread
 import schedule
 import telebot
@@ -7,10 +8,10 @@ from flask import Flask, request
 import backend
 
 TOKEN = os.getenv('BOT_TOKEN')
-POST_TIME = os.getenv('POST_TIME').split()
+POST_TIME = os.getenv('POST_TIME', '').split()
 
 CHANNEL_ID = '@letovo_quotes'
-MOD_ID = -1001791070494
+ADMIN_ID = -1001791070494
 VOTING_ID = -1001645253084
 DISCUSSION_ID = -1001742201177
 
@@ -37,11 +38,52 @@ def format_time(raw):
     return time.strftime('%H:%M:%S', time.gmtime(raw))
 
 
+def mod_feature(func):
+    @wraps(func)
+    def wrapper(message, *args, **kwargs):
+        if message.from_user.id not in MOD_LIST:
+            bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+            return
+        return func(message, *args, **kwargs)
+
+    return wrapper
+
+
+def admin_feature(func):
+    @wraps(func)
+    def wrapper(message, *args, **kwargs):
+        if message.chat.id != ADMIN_ID:
+            bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+            return
+        return func(message, *args, **kwargs)
+
+    return wrapper
+
+
+def private_chat(func):
+    @wraps(func)
+    def wrapper(message, *args, **kwargs):
+        if message.chat.id in (DISCUSSION_ID, VOTING_ID):
+            return
+        return func(message, *args, **kwargs)
+
+    return wrapper
+
+
+def arg_parse(func):
+    @wraps(func)
+    def wrapper(message, *args, **kwargs):
+        params = message.text[len(func.__name__) + 2:].split('; ')
+        return func(message, params, *args, **kwargs)
+
+    return wrapper
+
+
 def publish_quote():
     queue = backend.open_json('queue.json')
 
     if not queue:
-        bot.send_message(MOD_ID, text='Цитаты в очереди закончились! :(')
+        bot.send_message(ADMIN_ID, text='Цитаты в очереди закончились! :(')
         return
 
     bot.send_message(CHANNEL_ID, text=queue['0'])
@@ -61,6 +103,17 @@ def handle_quote(message, quote):
     if author_name is None:
         author_name = author.first_name + ' ' + author.last_name
 
+    banlist = backend.open_json('banlist.json')
+
+    if author_id in banlist:
+        if int(time.time()) > banlist[author_id]:
+            banlist.pop(author_id)
+            backend.save_json(banlist, 'banlist.json')
+        else:
+            bot.send_message(message.chat.id,
+                             f'Ты был заблокирован, поэтому не можешь предлагать цитаты. Оставшееся время блокировки: {format_time(banlist[author_id] - int(time.time()))}')
+            return
+
     if quote.find('#') == -1:
         bot.send_message(message.chat.id, 'Цитата должна содержать хештег!')
         return
@@ -77,44 +130,32 @@ def handle_quote(message, quote):
                              'Подобная цитата уже отправлена в предложку! Флудить не стоит, ожидай ответа модерации :)')
             return
 
-    banlist = backend.open_json('banlist.json')
+    bot.send_message(message.chat.id, 'Принято! Отправил твою цитату в предложку :)')
 
-    if author_id in banlist and int(time.time()) > banlist[author_id]:
-        banlist.pop(author_id)
-        backend.save_json(banlist, 'banlist.json')
-
-    if author_id not in banlist:
-        bot.send_message(message.chat.id, 'Принято! Отправил твою цитату в предложку :)')
-
-        if pending:
-            call_count = max(map(int, pending)) + 1
-        else:
-            call_count = 0
-
-        keyboard = telebot.types.InlineKeyboardMarkup()
-        keyboard.add(telebot.types.InlineKeyboardButton(text='➕ За', callback_data=f'upvote: {call_count}'))
-        keyboard.add(telebot.types.InlineKeyboardButton(text='➖ Против', callback_data=f'downvote: {call_count}'))
-        keyboard.add(telebot.types.InlineKeyboardButton(text='🚫 Отклонить (только администраторы)',
-                                                        callback_data=f'reject: {call_count}'))
-
-        sent_quote = bot.send_message(VOTING_ID,
-                                      f'Пользователь @{author_name} [ID: {author_id}] предложил следующую цитату:\n\n{quote}',
-                                      reply_markup=keyboard)
-
-        pending.update(
-            {call_count: {'text': quote, 'message_id': sent_quote.message_id, 'author': [author_id, author_name],
-                          'source': [message.chat.id, message.id], 'reputation': {'+': [], '-': []}}})
-
-        backend.save_json(pending, 'pending.json')
+    if pending:
+        call_count = max(map(int, pending)) + 1
     else:
-        bot.send_message(message.chat.id,
-                         f'Ты был заблокирован, поэтому не можешь предлагать цитаты. Оставшееся время блокировки: {format_time(banlist[author_id] - int(time.time()))}')
-        return
+        call_count = 0
+
+    keyboard = telebot.types.InlineKeyboardMarkup()
+    keyboard.add(telebot.types.InlineKeyboardButton(text='➕ За', callback_data=f'upvote: {call_count}'))
+    keyboard.add(telebot.types.InlineKeyboardButton(text='➖ Против', callback_data=f'downvote: {call_count}'))
+    keyboard.add(telebot.types.InlineKeyboardButton(text='🚫 Отклонить (только администраторы)',
+                                                    callback_data=f'reject: {call_count}'))
+
+    sent_quote = bot.send_message(VOTING_ID,
+                                  f'Пользователь @{author_name} [ID: {author_id}] предложил следующую цитату:\n\n{quote}',
+                                  reply_markup=keyboard)
+
+    pending.update(
+        {call_count: {'text': quote, 'message_id': sent_quote.message_id, 'author': [author_id, author_name],
+                      'source': [message.chat.id, message.id], 'reputation': {'+': [], '-': []}}})
+
+    backend.save_json(pending, 'pending.json')
 
 
 def quote_verdict():
     pending = backend.open_json('pending.json')
-    rejected = backend.open_json('rejected.json')
 
     for notif_id in voting_notif_ids:
         try:
@@ -133,53 +174,53 @@ def quote_verdict():
         reputation = len(quote['reputation']['+']) - len(quote['reputation']['-'])
 
         if len(quote['reputation']['+']) + len(quote['reputation']['-']) < MIN_VOTES:
-            updated_pending.update({key: quote})
-
-            not_voted = set(MOD_LIST) - set(quote['reputation']['+'] + quote['reputation']['-'])
-            if not_voted:
+            not_voted_quotes = set(MOD_LIST) - set(quote['reputation']['+'] + quote['reputation']['-'])
+            if not_voted_quotes:
                 sent_notif = bot.send_message(VOTING_ID, 'Цитата не набрала нужного количества голосов. '
-                                              + ' '.join(MOD_LIST[mod] for mod in not_voted)
+                                              + ' '.join(MOD_LIST[mod] for mod in not_voted_quotes)
                                               + ', проголосуйте за нее, пожалуйста!',
                                               disable_notification=True, reply_to_message_id=message_id)
                 voting_notif_ids.append(sent_notif.message_id)
 
-            continue
+            updated_pending.update({key: quote})
 
-        if reputation < ACCEPT:
+        elif reputation < ACCEPT:
             bot.edit_message_text(
                 f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
                 f'предложил следующую цитату:\n\n{quote_text}\n\nОтклонено модерацией с рейтингом {reputation}',
                 VOTING_ID, message_id, reply_markup=None)
-            bot.send_message(author_id, 'Твоя цитата была отклонена :(', reply_to_message_id=source_id)
+            try:
+                bot.send_message(author_id, 'Твоя цитата была отклонена :(', reply_to_message_id=source_id)
+            except telebot.apihelper.ApiTelegramException:
+                bot.send_message(author_id, 'Твоя цитата была отклонена :(')
 
+            rejected = backend.open_json('rejected.json')
             if rejected:
                 rejected.update({str(max(map(int, rejected)) + 1): [quote_text, reputation]})
             else:
                 rejected.update({'0': [quote_text, reputation]})
+            backend.save_json(rejected, 'rejected.json')
 
-            continue
+        else:
+            bot.edit_message_text(
+                f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
+                f'предложил следующую цитату:\n\n{quote_text}\n\nОпубликовано модерацией с рейтингом {reputation}',
+                VOTING_ID, message_id, reply_markup=None)
+            try:
+                bot.send_message(author_id, 'Твоя цитата отправлена в очередь на публикацию!', reply_to_message_id=source_id)
+            except telebot.apihelper.ApiTelegramException:
+                bot.send_message(author_id, 'Твоя цитата отправлена в очередь на публикацию!')
 
-        queue = backend.open_json('queue.json')
-        next_quote_id = len(queue)
-        queue.update({str(next_quote_id): quote_text})
-
-        bot.edit_message_text(
-            f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
-            f'предложил следующую цитату:\n\n{quote_text}\n\nОпубликовано модерацией с рейтингом {reputation}',
-            VOTING_ID, message_id, reply_markup=None)
-        bot.send_message(author_id, 'Твоя цитата отправлена в очередь на публикацию!', reply_to_message_id=source_id)
-
-        backend.save_json(queue, 'queue.json')
+            queue = backend.open_json('queue.json')
+            queue.update({str(len(queue)): quote_text})
+            backend.save_json(queue, 'queue.json')
 
     backend.save_json(updated_pending, 'pending.json')
-    backend.save_json(rejected, 'rejected.json')
 
 
 @bot.message_handler(commands=['start'])
-def greetings(message):
-    if message.chat.id == DISCUSSION_ID:
-        return
-
+@private_chat
+def start(message):
     bot.send_message(message.chat.id,
                      'Привет! Сюда ты можешь предлагать цитаты для публикации в канале "Забавные цитаты Летово". Если ты вдруг еще не подписан - держи ссылку: '
                      'https://t.me/letovo_quotes. Никаких ограничений - предлагай все, что покажется тебе смешным (с помощью команды /suggest), главное, укажи автора цитаты :)')
@@ -187,10 +228,8 @@ def greetings(message):
 
 
 @bot.message_handler(commands=['suggest'])
+@private_chat
 def suggest(message):
-    if message.chat.id == DISCUSSION_ID:
-        return
-
     quote = backend.reformat_quote(message.text[9:])
 
     if quote:
@@ -203,33 +242,29 @@ def suggest(message):
 
 
 @bot.message_handler(commands=['help'])
-def bot_help(message):
-    if message.chat.id == DISCUSSION_ID:
-        return
-
+@private_chat
+def help(message):
     user_help = '<b>Пользовательские команды:</b>\n/start – запуск бота\n/help – вызов этого сообщения\n' \
                 '/suggest – предложить цитату\n/suggest_rollback – откатить последнюю предложенную цитату'
     mod_help = '<b>Админские команды:</b>\n/ban [id]; [reason]; [duration in sec, 3600 by default] – блокировка пользователя\n/unban [id]; [reason] - разблокировка пользователя\n' \
                '/get_banlist – список заблокированных в данный момент пользователей\n/get – текущая очередь цитат на публикацию\n' \
                '/not_voted – получить ссылки на все цитаты в предложке, за которые ты ещё не проголосовал\n'
-    admin_help = '/push [text] – добавление цитаты в очередь\n/clear – очистка очереди на публикацию\n' \
+    admin_help = '/push [text] – добавление цитаты в очередь\n' \
                  '/edit [id]; [text] – изменение цитаты с заданным номером\n/delete [id] – удаление цитаты с заданным номером\n' \
                  '/swap [id1]; [id2] – поменять местами две цитаты\n/insert [id] – вставить цитату в заданное место в очереди\n' \
                  '/verdict – вызвать определение вердиктов для всех цитат в предложке'
 
     bot.send_message(message.chat.id, user_help, parse_mode='HTML')
 
-    if message.chat.id == MOD_ID:
+    if message.chat.id == ADMIN_ID:
         bot.send_message(message.chat.id, mod_help + admin_help, parse_mode='HTML')
     elif message.from_user.id in MOD_LIST:
         bot.send_message(message.chat.id, mod_help, parse_mode='HTML')
 
 
 @bot.message_handler(commands=['suggest_rollback'])
+@private_chat
 def suggest_rollback(message):
-    if message.chat.id == DISCUSSION_ID:
-        return
-
     pending = backend.open_json('pending.json')
 
     for counter, sent_quote in reversed(pending.items()):
@@ -250,20 +285,22 @@ def suggest_rollback(message):
 
 
 @bot.message_handler(commands=['verdict'])
-def instant_quote_verdict(message):
-    if message.chat.id == MOD_ID:
-        quote_verdict()
-    else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+@admin_feature
+@private_chat
+def verdict(message):
+    quote_verdict()
 
 
 @bot.message_handler(commands=['not_voted'])
-def not_voted_quotes(message):
+@arg_parse
+@mod_feature
+@private_chat
+def not_voted(message, args):
     user_id = message.from_user.id
-    target = message.text[11:]
+    target = args[0]
 
     if target:
-        if not target.isdigit() or not int(target) in MOD_LIST:
+        if not target.isdigit() or int(target) not in MOD_LIST:
             bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
             return
         if user_id in ADMIN_LIST:
@@ -272,181 +309,159 @@ def not_voted_quotes(message):
             bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
             return
 
-    if user_id in MOD_LIST:
-        pending = backend.open_json('pending.json')
-        result = ''
+    pending = backend.open_json('pending.json')
+    result = ''
 
-        for quote in pending.values():
-            if user_id not in quote['reputation']['+'] + quote['reputation']['-']:
-                result += f'https://t.me/c/{str(VOTING_ID)[3:]}/{quote["message_id"]}\n'
+    for quote in pending.values():
+        if user_id not in quote['reputation']['+'] + quote['reputation']['-']:
+            result += f'https://t.me/c/{str(VOTING_ID)[3:]}/{quote["message_id"]}\n'
 
-        if result:
-            bot.send_message(message.chat.id, 'Ты не проголосовал за следующие цитаты:\n' + result)
-        else:
-            bot.send_message(message.chat.id, 'Ты за всё проголосовал! Так держать!')
+    if result:
+        bot.send_message(message.chat.id, 'Ты не проголосовал за следующие цитаты:\n' + result)
     else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'Ты за всё проголосовал! Так держать!')
 
 
 @bot.message_handler(commands=['ban'])
-def ban(message):
-    if message.from_user.id in MOD_LIST:
-        args = message.text[5:].split('; ')
+@arg_parse
+@mod_feature
+@private_chat
+def ban(message, args):
+    if len(args) == 3:
+        user_id, reason, period = args
 
-        if len(args) == 3:
-            user_id, reason, period = args[0], args[1], args[2]
-
-            if not period.isdigit():
-                bot.send_message(message.chat.id, 'Введи корректное значение срока блокировки!')
-                return
-        elif len(args) == 2:
-            user_id, reason = args[0], args[1]
-            period = BAN_TIME
-        else:
-            bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+        if not period.isdigit():
+            bot.send_message(message.chat.id, 'Введи корректное значение срока блокировки!')
             return
-
-        if not user_id.isdigit():
-            bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
-            return
-
-        banned_log = bot.send_message(MOD_ID,
-                                      f'Модератор @{message.from_user.username} заблокировал пользователя {user_id} на {period} секунд по причине "{reason}"')
-        bot.pin_chat_message(MOD_ID, banned_log.message_id)
-
-        banlist = backend.open_json('banlist.json')
-        banlist.update({user_id: int(time.time()) + int(period)})
-        backend.save_json(banlist, 'banlist.json')
-
-        bot.send_message(user_id, f'Ты был заблокирован по причине {reason}. Оставшееся время блокировки: {format_time(int(period))}')
-        bot.send_message(message.chat.id, f'Пользователь {user_id} успешно заблокирован!')
+    elif len(args) == 2:
+        user_id, reason = args
+        period = BAN_TIME
     else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+        return
+
+    if not user_id.isdigit():
+        bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
+        return
+
+    banned_log = bot.send_message(ADMIN_ID,
+                                  f'Модератор @{message.from_user.username} заблокировал пользователя {user_id} на {period} секунд по причине "{reason}"')
+    bot.pin_chat_message(ADMIN_ID, banned_log.message_id)
+
+    banlist = backend.open_json('banlist.json')
+    banlist.update({user_id: int(time.time()) + int(period)})
+    backend.save_json(banlist, 'banlist.json')
+
+    bot.send_message(user_id, f'Ты был заблокирован по причине {reason}. Оставшееся время блокировки: {format_time(int(period))}')
+    bot.send_message(message.chat.id, f'Пользователь {user_id} успешно заблокирован!')
 
 
 @bot.message_handler(commands=['unban'])
-def unban(message):
-    if message.from_user.id in MOD_LIST:
-        args = message.text[7:].split('; ')
-
-        if len(args) >= 2:
-            user_id, reason = args
-            if not user_id.isdigit():
-                bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
-                return
-        else:
+@arg_parse
+@mod_feature
+@private_chat
+def unban(message, args):
+    if len(args) >= 2:
+        user_id, reason = args
+        if not user_id.isdigit():
             bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
             return
-
-        banlist = backend.open_json('banlist.json')
-
-        if user_id not in banlist:
-            bot.send_message(message.chat.id, f'Пользователь {user_id} не заблокирован!')
-            return
-
-        banlist.pop(user_id)
-
-        bot.send_message(message.chat.id, f'Пользователь {user_id} успешно разблокирован!')
-        banned_log = bot.send_message(MOD_ID,
-                                      f'Модератор @{message.from_user.username} разблокировал пользователя {user_id} по причине "{reason}"')
-        bot.pin_chat_message(MOD_ID, banned_log.message_id)
-
-        backend.save_json(banlist, 'banlist.json')
     else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+        bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+        return
+
+    banlist = backend.open_json('banlist.json')
+
+    if user_id not in banlist:
+        bot.send_message(message.chat.id, f'Пользователь {user_id} не заблокирован!')
+        return
+
+    banlist.pop(user_id)
+
+    bot.send_message(message.chat.id, f'Пользователь {user_id} успешно разблокирован!')
+    banned_log = bot.send_message(ADMIN_ID,
+                                  f'Модератор @{message.from_user.username} разблокировал пользователя {user_id} по причине "{reason}"')
+    bot.pin_chat_message(ADMIN_ID, banned_log.message_id)
+
+    backend.save_json(banlist, 'banlist.json')
 
 
 @bot.message_handler(commands=['push'])
-def add_queue(message):
-    if message.chat.id == MOD_ID:
-        quote = message.text[6:]
+@arg_parse
+@admin_feature
+@private_chat
+def push(message, args):
+    quote = args[0]
 
-        if quote:
-            queue = backend.open_json('queue.json')
+    if not quote:
+        bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
+        return
 
-            queue.update({str(len(queue)): quote})
+    queue = backend.open_json('queue.json')
 
-            bot.send_message(MOD_ID, 'Успешно занес цитату в очередь публикации!')
+    queue.update({str(len(queue)): quote})
+    bot.send_message(ADMIN_ID, 'Успешно занес цитату в очередь публикации!')
 
-            backend.save_json(queue, 'queue.json')
-        else:
-            bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
-            return
-    else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+    backend.save_json(queue, 'queue.json')
 
 
 @bot.message_handler(commands=['get'])
-def get_queue(message):
-    if message.from_user.id in MOD_LIST:
-        queue = backend.open_json('queue.json')
+@mod_feature
+@private_chat
+def get(message):
+    queue = backend.open_json('queue.json')
 
-        if not queue:
-            bot.send_message(message.chat.id, 'Очередь публикации пуста!')
-            return
+    if not queue:
+        bot.send_message(message.chat.id, 'Очередь публикации пуста!')
+        return
 
-        for quote_id, quote in queue.items():
-            bot.send_message(message.chat.id, f'#{quote_id}\n{quote}')
-    else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+    for quote_id, quote in queue.items():
+        bot.send_message(message.chat.id, f'#{quote_id}\n{quote}')
 
 
 @bot.message_handler(commands=['get_banlist'])
+@mod_feature
+@private_chat
 def get_banlist(message):
-    if message.from_user.id in MOD_LIST:
-        banlist = backend.open_json('banlist.json')
+    banlist = backend.open_json('banlist.json')
 
-        if not banlist:
-            bot.send_message(message.chat.id, 'Список заблокированных пользователей пуст!')
-            return
+    if not banlist:
+        bot.send_message(message.chat.id, 'Список заблокированных пользователей пуст!')
+        return
 
-        bot.send_message(message.chat.id, 'ID пользователя: время разблокировки')
+    bot.send_message(message.chat.id, 'ID пользователя: время разблокировки')
 
-        for key, value in banlist.items():
-            bot.send_message(message.chat.id, key + ': ' + format_time(int(value)))
-    else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+    for key, value in banlist.items():
+        bot.send_message(message.chat.id, key + ': ' + format_time(int(value)))
 
 
 @bot.message_handler(commands=['delete'])
-def del_quote(message):
-    if message.chat.id == MOD_ID:
-        quote_id = message.text[8:]
+@arg_parse
+@admin_feature
+@private_chat
+def delete(message, args):
+    quote_id = args[0]
 
-        queue = backend.open_json('queue.json')
+    queue = backend.open_json('queue.json')
 
-        if quote_id not in queue:
-            bot.send_message(message.chat.id, 'Цитаты с таким номером не существует!')
-            return
+    if quote_id not in queue:
+        bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+        return
 
-        for key in range(int(quote_id), len(queue) - 1):
-            queue[str(key)] = queue[str(key + 1)]
-        queue.pop(str(len(queue) - 1))
+    for key in range(int(quote_id), len(queue) - 1):
+        queue[str(key)] = queue[str(key + 1)]
+    queue.pop(str(len(queue) - 1))
 
-        bot.send_message(MOD_ID, f'Успешно удалил цитату с номером {quote_id}!')
+    bot.send_message(ADMIN_ID, f'Успешно удалил цитату с номером {quote_id}!')
 
-        backend.save_json(queue, 'queue.json')
-    else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
-
-
-@bot.message_handler(commands=['clear_queue'])
-def clear_queue(message):
-    if message.chat.id == MOD_ID:
-        keyboard = telebot.types.InlineKeyboardMarkup()
-        keyboard.add(telebot.types.InlineKeyboardButton(text='➕ Да', callback_data='clear: yes'))
-        keyboard.add(telebot.types.InlineKeyboardButton(text='➖ Нет', callback_data='clear: no'))
-
-        bot.send_message(MOD_ID, 'Ты уверен в том, что хочешь очистить очередь публикаций?', reply_markup=keyboard)
-    else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+    backend.save_json(queue, 'queue.json')
 
 
 @bot.message_handler(commands=['edit'])
-def edit_quote(message):
-    if message.chat.id == MOD_ID:
-        args = message.text[6:].split('; ')
-
+@arg_parse
+@private_chat
+def edit(message, args):
+    if message.chat.id == ADMIN_ID:
         if len(args) == 2:
             quote_id, new_text = args
             queue = backend.open_json('queue.json')
@@ -454,19 +469,19 @@ def edit_quote(message):
             if quote_id in queue.keys():
                 queue[quote_id] = new_text
             else:
-                bot.send_message(MOD_ID, 'Цитаты с таким номером не существует!')
+                bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
                 return
 
-            bot.send_message(MOD_ID, f'Успешно изменил цитату под номером {quote_id}!')
+            bot.send_message(ADMIN_ID, f'Успешно изменил цитату под номером {quote_id}!')
 
             backend.save_json(queue, 'queue.json')
         else:
-            bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
+            bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
             return
     elif message.chat.id == VOTING_ID:
         pending = backend.open_json('pending.json')
 
-        quote = backend.reformat_quote(message.text[6:])
+        quote = backend.reformat_quote(args[0])
         source = message.reply_to_message.text.split('\n')
 
         for key, value in pending.items():
@@ -484,56 +499,54 @@ def edit_quote(message):
 
 
 @bot.message_handler(commands=['swap'])
-def swap_queue(message):
-    if message.chat.id == MOD_ID:
-        args = message.text[6:].split('; ')
+@arg_parse
+@admin_feature
+@private_chat
+def swap(message, args):
+    if len(args) != 2:
+        bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
+        return
 
-        if len(args) == 2:
-            queue = backend.open_json('queue.json')
+    src, dest = args
+    queue = backend.open_json('queue.json')
 
-            if args[0] in queue and args[1] in queue:
-                queue[args[0]], queue[args[1]] = queue[args[1]], queue[args[0]]
+    if src in queue and dest in queue:
+        queue[src], queue[dest] = queue[dest], queue[src]
 
-                bot.send_message(MOD_ID, 'Успешно поменял цитаты местами в очереди!')
-            else:
-                bot.send_message(MOD_ID, 'Цитаты с таким номером не существует!')
-                return
-
-            backend.save_json(queue, 'queue.json')
-        else:
-            bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
-            return
+        bot.send_message(ADMIN_ID, 'Успешно поменял цитаты местами в очереди!')
     else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+        bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
+        return
+
+    backend.save_json(queue, 'queue.json')
 
 
 @bot.message_handler(commands=['insert'])
-def insert_quote(message):
-    if message.chat.id == MOD_ID:
-        args = message.text[8:].split('; ')
+@arg_parse
+@admin_feature
+@private_chat
+def insert(message, args):
+    if len(args) != 2 or not args[0].isdigit():
+        bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
+        return
 
-        if len(args) == 2:
-            queue = backend.open_json('queue.json')
+    quote_id, quote = args
+    queue = backend.open_json('queue.json')
 
-            if args[0] in queue:
-                current_quote = queue[args[0]]
-                for key in range(int(args[0]) + 1, len(queue) + 1):
-                    next_quote = queue.get(str(key))
-                    queue[str(key)] = current_quote
-                    current_quote = next_quote
+    if quote_id not in queue:
+        bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+        return
 
-                queue[args[0]] = args[1]
+    current_quote = queue[quote_id]
+    for key in range(int(quote_id) + 1, len(queue) + 1):
+        next_quote = queue.get(str(key))
+        queue[str(key)] = current_quote
+        current_quote = next_quote
 
-                bot.send_message(MOD_ID, 'Успешно вставил цитату в очередь!')
-            else:
-                bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+    queue[quote_id] = quote
+    bot.send_message(ADMIN_ID, 'Успешно вставил цитату в очередь!')
 
-            backend.save_json(queue, 'queue.json')
-        else:
-            bot.send_message(MOD_ID, 'Проверь корректность аргументов!')
-            return
-    else:
-        bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
+    backend.save_json(queue, 'queue.json')
 
 
 @bot.message_handler(content_types=['text'])
@@ -552,68 +565,64 @@ def text_handler(message):
 def button_handler(call):
     action = call.data.split(':')
 
-    if action[0] in ['upvote', 'downvote', 'reject']:
-        pending = backend.open_json('pending.json')
+    if action[0] not in ('upvote', 'downvote', 'reject'):
+        return
 
-        actual_quote_id = action[1].replace(' ', '')
+    pending = backend.open_json('pending.json')
 
-        if actual_quote_id not in pending:
-            bot.reply_to(call.message,
-                         'Возникла проблема с обработкой цитаты :( Если это необходимо, проведи ее вручную.')
+    quote_id = action[1].replace(' ', '')
+
+    if quote_id not in pending:
+        bot.reply_to(call.message,
+                     'Возникла проблема с обработкой цитаты :( Если это необходимо, проведи ее вручную.')
+        return
+
+    author_id = pending[quote_id]['source'][0]
+    source_id = pending[quote_id]['source'][1]
+    moderator_id = call.from_user.id
+    reputation = pending[quote_id]['reputation']
+
+    match action[0]:
+        case 'upvote':
+            current_vote, opposite_vote = ('+', 'за'), ('-', 'против')
+        case 'downvote':
+            current_vote, opposite_vote = ('-', 'против'), ('+', 'за')
+        case _:
+            current_vote, opposite_vote = ('', ''), ('', '')
+
+    if action[0] in ('upvote', 'downvote'):
+        if moderator_id in reputation[current_vote[0]]:
+            bot.answer_callback_query(call.id, f'Ты уже проголосовал "{current_vote[1]}"!')
             return
 
-        author_id = pending[actual_quote_id]['source'][0]
-        source_id = pending[actual_quote_id]['source'][1]
-        moderator_id = call.from_user.id
-        reputation = pending[actual_quote_id]['reputation']
+        if moderator_id in reputation[opposite_vote[0]]:
+            pending[quote_id]['reputation'][opposite_vote[0]].remove(call.from_user.id)
+            bot.answer_callback_query(call.id, f'Успешно поменял твой голос с "{opposite_vote[1]}" на "{current_vote[1]}"!')
 
-        if action[0] == 'upvote' or action[0] == 'downvote':
-            if action[0] == 'upvote':
-                if moderator_id in reputation['-']:
-                    pending[actual_quote_id]['reputation']['-'].remove(call.from_user.id)
-                    bot.answer_callback_query(call.id, 'Успешно поменял твой голос с "против" на "за"!')
-                elif moderator_id in reputation['+']:
-                    bot.answer_callback_query(call.id, 'Ты уже проголосовал "за"!')
-                    return
+        bot.answer_callback_query(call.id, f'Спасибо за голос "{current_vote[1]}"!')
 
-                bot.answer_callback_query(call.id, 'Спасибо за голос!')
+        pending[quote_id]['reputation'][current_vote[0]].append(call.from_user.id)
 
-                pending[actual_quote_id]['reputation']['+'].append(call.from_user.id)
-            else:
-                if moderator_id in reputation['+']:
-                    pending[actual_quote_id]['reputation']['+'].remove(call.from_user.id)
-                    bot.answer_callback_query(call.id, 'Успешно поменял твой голос с "за" на "против"!')
-                elif moderator_id in reputation['-']:
-                    bot.answer_callback_query(call.id, 'Ты уже проголосовал "против"!')
-                    return
+    elif action[0] == 'reject' and call.from_user.id in ADMIN_LIST:
+        rejected = backend.open_json('rejected.json')
 
-                bot.answer_callback_query(call.id, 'Спасибо за голос!')
-
-                pending[actual_quote_id]['reputation']['-'].append(call.from_user.id)
-        elif action[0] == 'reject' and call.from_user.id in ADMIN_LIST:
-            rejected = backend.open_json('rejected.json')
-
-            bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', VOTING_ID,
-                                  call.message.id, reply_markup=None)
+        bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', VOTING_ID,
+                              call.message.id, reply_markup=None)
+        try:
             bot.send_message(author_id, 'Твоя цитата была отклонена :(', reply_to_message_id=source_id)
+        except telebot.apihelper.ApiTelegramException:
+            bot.send_message(author_id, 'Твоя цитата была отклонена :(')
 
-            if rejected:
-                rejected.update({str(max(map(int, rejected)) + 1): call.message.text})
-            else:
-                rejected.update({'0': call.message.text})
+        if rejected:
+            rejected.update({str(max(map(int, rejected)) + 1): call.message.text})
+        else:
+            rejected.update({'0': call.message.text})
 
-            backend.save_json(rejected, 'rejected.json')
+        backend.save_json(rejected, 'rejected.json')
 
-            pending.pop(actual_quote_id)
+        pending.pop(quote_id)
 
-        backend.save_json(pending, 'pending.json')
-
-    elif call.data == 'clear: yes':
-        backend.save_json({}, 'queue.json')
-        bot.edit_message_text('Успешно очистил очередь публикаций!', MOD_ID, call.message.id, reply_markup=None)
-    elif call.data == 'clear: no':
-        bot.edit_message_text('Запрос на очистку очереди публикаций отклонен.', MOD_ID, call.message.id,
-                              reply_markup=None)
+    backend.save_json(pending, 'pending.json')
 
     bot.answer_callback_query(call.id)
 

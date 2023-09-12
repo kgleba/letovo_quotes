@@ -16,10 +16,9 @@
 1. `/push` – add a quote to the publish queue
 2. `/edit` – edit a quote with a given id
 3. `/delete` – delete a quote with a given id from the queue
-4. `/clear` – clear the queue
-5. `/swap` – swap two quotes in the queue
-6. `/insert` – insert a quote into the queue
-7. `/verdict` – get verdicts for all quotes in the queue
+4. `/swap` – swap two quotes in the queue
+5. `/insert` – insert a quote into the queue
+6. `/verdict` – get verdicts for all quotes in the queue
 
 All data is stored in a GitLab repository.
 Quotes are posted automatically at 12 AM (UTC+3).
