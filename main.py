@@ -103,6 +103,17 @@ def handle_quote(message, quote):
     if author_name is None:
         author_name = author.first_name + ' ' + author.last_name
 
+    banlist = backend.open_json('banlist.json')
+
+    if author_id in banlist:
+        if int(time.time()) > banlist[author_id]:
+            banlist.pop(author_id)
+            backend.save_json(banlist, 'banlist.json')
+        else:
+            bot.send_message(message.chat.id,
+                             f'Ты был заблокирован, поэтому не можешь предлагать цитаты. Оставшееся время блокировки: {format_time(banlist[author_id] - int(time.time()))}')
+            return
+
     if quote.find('#') == -1:
         bot.send_message(message.chat.id, 'Цитата должна содержать хештег!')
         return
@@ -117,17 +128,6 @@ def handle_quote(message, quote):
         if backend.check_similarity(sent_quote['text'], quote) > 75:
             bot.send_message(message.chat.id,
                              'Подобная цитата уже отправлена в предложку! Флудить не стоит, ожидай ответа модерации :)')
-            return
-
-    banlist = backend.open_json('banlist.json')
-
-    if author_id in banlist:
-        if int(time.time()) > banlist[author_id]:
-            banlist.pop(author_id)
-            backend.save_json(banlist, 'banlist.json')
-        else:
-            bot.send_message(message.chat.id,
-                             f'Ты был заблокирован, поэтому не можешь предлагать цитаты. Оставшееся время блокировки: {format_time(banlist[author_id] - int(time.time()))}')
             return
 
     bot.send_message(message.chat.id, 'Принято! Отправил твою цитату в предложку :)')
@@ -599,7 +599,7 @@ def button_handler(call):
             pending[quote_id]['reputation'][opposite_vote[0]].remove(call.from_user.id)
             bot.answer_callback_query(call.id, f'Успешно поменял твой голос с "{opposite_vote[1]}" на "{current_vote[1]}"!')
 
-        bot.answer_callback_query(call.id, 'Спасибо за голос!')
+        bot.answer_callback_query(call.id, f'Спасибо за голос "{current_vote[1]}"!')
 
         pending[quote_id]['reputation'][current_vote[0]].append(call.from_user.id)
 
