@@ -69,7 +69,7 @@ def reformat_quote(text: str):
     text = re.sub(r'(^|\n+)[-–—] *', r'\1— ', text)
 
     if text.count('—') == 1:
-        text = text.replace('— ', '')
+        text = re.sub(r'(^|\n+)–', r'', text)
 
     tag = ''
     while '#' in text:
