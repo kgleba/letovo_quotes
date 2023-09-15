@@ -99,6 +99,7 @@ def handle_quote(message, quote):
     author = message.from_user
     author_name = author.username
     author_id = str(author.id)
+    quote = utils.reformat_quote(quote)
 
     if author_name is None:
         author_name = author.first_name + ' ' + author.last_name
@@ -230,10 +231,10 @@ def start(message):
 @bot.message_handler(commands=['suggest'])
 @private_chat
 def suggest(message):
-    quote = utils.reformat_quote(message.text[9:])
+    quote_split = message.text.split(' ')
 
-    if quote:
-        handle_quote(message, quote)
+    if len(quote_split) != 1:
+        handle_quote(message, ' '.join(quote_split))
     else:
         bot.send_message(message.chat.id,
                          'Эта команда используется для отправки цитат в предложку. Все, что тебе нужно сделать - ввести текст после команды /suggest (или следующим сообщением) и ждать публикации. '
@@ -481,7 +482,7 @@ def edit(message, args):
     elif message.chat.id == VOTING_ID:
         pending = utils.open_json('pending.json')
 
-        quote = utils.reformat_quote(args[0])
+        quote = args[0]
         source = message.reply_to_message.text.split('\n')
 
         for key, value in pending.items():
