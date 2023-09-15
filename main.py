@@ -231,9 +231,9 @@ def start(message):
 @bot.message_handler(commands=['suggest'])
 @private_chat
 def suggest(message):
-    quote_split = message.text.split(' ')
+    quote_split = message.text.split(' ')[1:]
 
-    if len(quote_split) != 1:
+    if quote_split:
         handle_quote(message, ' '.join(quote_split))
     else:
         bot.send_message(message.chat.id,
