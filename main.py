@@ -222,6 +222,7 @@ def quote_verdict():
 @bot.message_handler(commands=['start'])
 @private_chat
 def start(message):
+    waiting_for_suggest[message.from_user.id] = False
     bot.send_message(message.chat.id,
                      'Привет! Сюда ты можешь предлагать цитаты для публикации в канале "Забавные цитаты Летово". Если ты вдруг еще не подписан - держи ссылку: '
                      'https://t.me/letovo_quotes. Никаких ограничений - предлагай все, что покажется тебе смешным (с помощью команды /suggest), главное, укажи автора цитаты :)')
@@ -231,20 +232,22 @@ def start(message):
 @bot.message_handler(commands=['suggest'])
 @private_chat
 def suggest(message):
-    quote_split = message.text.split(' ')[1:]
+    waiting_for_suggest[message.from_user.id] = False
+    quote = message.text.replace('@letovo_suggestion_bot', '')[9:]
 
-    if quote_split:
-        handle_quote(message, ' '.join(quote_split))
+    if quote:
+        handle_quote(message, quote)
     else:
         bot.send_message(message.chat.id,
-                         'Эта команда используется для отправки цитат в предложку. Все, что тебе нужно сделать - ввести текст после команды /suggest (или следующим сообщением) и ждать публикации. '
-                         'И, пожалуйста, не пиши ерунду!')
+                         'Эта команда используется для отправки цитат в предложку. Все, что тебе нужно сделать — отправить цитату следующим сообщением или '
+                         'через пробел после команды /suggest и ждать вердикта.')
         waiting_for_suggest[message.from_user.id] = True
 
 
 @bot.message_handler(commands=['help'])
 @private_chat
 def help(message):
+    waiting_for_suggest[message.from_user.id] = False
     user_help = '<b>Пользовательские команды:</b>\n/start – запуск бота\n/help – вызов этого сообщения\n' \
                 '/suggest – предложить цитату\n/suggest_rollback – откатить последнюю предложенную цитату'
     mod_help = '<b>Админские команды:</b>\n/ban [id]; [reason]; [duration in sec, 3600 by default] – блокировка пользователя\n/unban [id]; [reason] - разблокировка пользователя\n' \
@@ -266,6 +269,7 @@ def help(message):
 @bot.message_handler(commands=['suggest_rollback'])
 @private_chat
 def suggest_rollback(message):
+    waiting_for_suggest[message.from_user.id] = False
     pending = utils.open_json('pending.json')
 
     for counter, sent_quote in reversed(pending.items()):
@@ -460,7 +464,6 @@ def delete(message, args):
 
 @bot.message_handler(commands=['edit'])
 @arg_parse
-@private_chat
 def edit(message, args):
     if message.chat.id == ADMIN_ID:
         if len(args) == 2:
@@ -483,15 +486,15 @@ def edit(message, args):
         pending = utils.open_json('pending.json')
 
         quote = args[0]
-        source = message.reply_to_message.text.split('\n')
+        source = message.reply_to_message
 
         for key, value in pending.items():
-            if message.reply_to_message.text[len(source[0]) + 1:].strip() == value['text'].strip():
+            if source.message_id == value['message_id']:
                 pending[key]['text'] = quote
                 break
 
-        bot.edit_message_text(source[0] + '\n\n' + quote, VOTING_ID,
-                              message.reply_to_message.message_id, reply_markup=message.reply_to_message.reply_markup)
+        bot.edit_message_text(source.text.splitlines()[0] + '\n\n' + quote, VOTING_ID,
+                              source.message_id, reply_markup=source.reply_markup)
         bot.delete_message(VOTING_ID, message.message_id)
 
         utils.save_json(pending, 'pending.json')
