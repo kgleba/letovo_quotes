@@ -338,6 +338,7 @@ def ban(message, args):
         if not period.isdigit():
             bot.send_message(message.chat.id, 'Введи корректное значение срока блокировки!')
             return
+        period = int(period)
     elif len(args) == 2:
         user_id, reason = args
         period = BAN_TIME
@@ -350,14 +351,14 @@ def ban(message, args):
         return
 
     banned_log = bot.send_message(ADMIN_ID,
-                                  f'Модератор @{message.from_user.username} заблокировал пользователя {user_id} на {period} секунд по причине "{reason}"')
+                                  f'Модератор @{message.from_user.username} заблокировал пользователя {user_id} на {format_time(period)} по причине "{reason}"')
     bot.pin_chat_message(ADMIN_ID, banned_log.message_id)
 
     banlist = utils.open_json('banlist.json')
-    banlist.update({user_id: int(time.time()) + int(period)})
+    banlist.update({user_id: int(time.time()) + period})
     utils.save_json(banlist, 'banlist.json')
 
-    bot.send_message(user_id, f'Ты был заблокирован по причине {reason}. Оставшееся время блокировки: {format_time(int(period))}')
+    bot.send_message(user_id, f'Ты был заблокирован по причине {reason}. Оставшееся время блокировки: {format_time(period)}')
     bot.send_message(message.chat.id, f'Пользователь {user_id} успешно заблокирован!')
 
 
@@ -366,11 +367,8 @@ def ban(message, args):
 @mod_feature
 @private_chat
 def unban(message, args):
-    if len(args) >= 2:
+    if len(args) == 2:
         user_id, reason = args
-        if not user_id.isdigit():
-            bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
-            return
     else:
         bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
         return
@@ -466,22 +464,21 @@ def delete(message, args):
 @arg_parse
 def edit(message, args):
     if message.chat.id == ADMIN_ID:
-        if len(args) == 2:
-            quote_id, new_text = args
-            queue = utils.open_json('queue.json')
-
-            if quote_id in queue.keys():
-                queue[quote_id] = new_text
-            else:
-                bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
-                return
-
-            bot.send_message(ADMIN_ID, f'Успешно изменил цитату под номером {quote_id}!')
-
-            utils.save_json(queue, 'queue.json')
-        else:
+        if len(args) != 2:
             bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
             return
+
+        quote_id, new_text = args
+        queue = utils.open_json('queue.json')
+
+        if quote_id not in queue:
+            bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
+            return
+
+        queue[quote_id] = new_text
+        bot.send_message(ADMIN_ID, f'Успешно изменил цитату под номером {quote_id}!')
+
+        utils.save_json(queue, 'queue.json')
     elif message.chat.id == VOTING_ID:
         pending = utils.open_json('pending.json')
 
@@ -514,13 +511,12 @@ def swap(message, args):
     src, dest = args
     queue = utils.open_json('queue.json')
 
-    if src in queue and dest in queue:
-        queue[src], queue[dest] = queue[dest], queue[src]
-
-        bot.send_message(ADMIN_ID, 'Успешно поменял цитаты местами в очереди!')
-    else:
+    if src not in queue or dest not in queue:
         bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
         return
+
+    queue[src], queue[dest] = queue[dest], queue[src]
+    bot.send_message(ADMIN_ID, 'Успешно поменял цитаты местами в очереди!')
 
     utils.save_json(queue, 'queue.json')
 
@@ -530,7 +526,7 @@ def swap(message, args):
 @admin_feature
 @private_chat
 def insert(message, args):
-    if len(args) != 2 or not args[0].isdigit():
+    if len(args) != 2:
         bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
         return
 
