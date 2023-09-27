@@ -17,12 +17,12 @@ DISCUSSION_ID = -1001742201177
 
 ADMIN_LIST = {1920379812: '@kglebaa', 1095891795: '@dr_platon', 1273466303: '@boris_ber', 1308606295: '@KSPalpatine'}
 MOD_LIST = {1224945213: '@DomineSalvaNos', 1050307229: '@GonSerg', 1711739283: '@Dr_Vortep',
-            1546943628: '@sociolover', 1109859757: '@AlexanderG_Po'}
+            1546943628: '@sociolover', 1109859757: '@AlexanderG_Po', 1922122255: '@Timoteo73', 1329271211: '@PolnyaDich'}
 MOD_LIST.update(ADMIN_LIST)
 
 BAN_TIME = 3600
 ACCEPT = 3
-MIN_VOTES = 7
+MIN_VOTES = 9
 
 bot = telebot.TeleBot(TOKEN)
 waiting_for_suggest = {}
