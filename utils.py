@@ -67,7 +67,7 @@ def reformat_quote(text: str):
 
     text = text.strip()
     text = re.sub(r'^[ \n]*', r'', text)
-    text = re.sub(r'^ *[-–—−‒⁃] *', r'— ', text, flags=re.MULTILINE)
+    text = re.sub(r'^ *[-–—−‒⁃]+ *', r'— ', text, flags=re.MULTILINE)
 
     if text.count('—') == 1:
         text = re.sub(r'^— ', r'', text, flags=re.MULTILINE)
