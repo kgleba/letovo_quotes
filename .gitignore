@@ -12,3 +12,6 @@ queue.json
 banlist.json
 pending.json
 rejected.json
+
+# Telethon
+telethon/*
