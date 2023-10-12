@@ -641,7 +641,7 @@ if __name__ == '__main__':
         @server.route('/')
         def webhook():
             bot.remove_webhook()
-            bot.set_webhook(url='https://letovo-quotes.herokuapp.com/', max_connections=1)
+            bot.set_webhook(url='https://letovo-quotes.herokuapp.com/updates', max_connections=1)
             return '?', 200
 
 
