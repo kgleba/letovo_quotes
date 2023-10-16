@@ -632,23 +632,28 @@ if __name__ == '__main__':
         server = Flask('__main__')
 
 
+        @server.route('/')
+        def ping():
+            return 'Go to /launch to set webhook', 200
+
+
         @server.route('/updates', methods=['POST'])
         def get_messages():
             bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode('utf-8'))])
             return '!', 200
 
 
-        @server.route('/')
+        @server.route('/launch')
         def webhook():
-            bot.remove_webhook()
             bot.set_webhook(url='https://letovo-quotes.herokuapp.com/updates', max_connections=1)
             return '?', 200
 
 
+        webhook()
         Thread(target=server.run, args=('0.0.0.0', os.environ.get('PORT', 80))).start()
     else:
         bot.remove_webhook()
-        Thread(target=bot.polling, args=()).start()
+        Thread(target=bot.infinity_polling, kwargs={'timeout': 60, 'long_polling_timeout': 60}).start()
 
 for data in POST_TIME:
     schedule.every().day.at(data).do(publish_quote)
