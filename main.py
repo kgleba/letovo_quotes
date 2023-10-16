@@ -8,7 +8,8 @@ from flask import Flask, request
 import utils
 
 TOKEN = os.getenv('BOT_TOKEN')
-POST_TIME = os.getenv('POST_TIME', '').split()
+RAW_POST_TIME = os.getenv('POST_TIME', '').split()
+POST_TIME = {data: i * 7 for i, data in enumerate(RAW_POST_TIME)}
 
 CHANNEL_ID = '@letovo_quotes'
 ADMIN_ID = -1001791070494
@@ -77,6 +78,13 @@ def arg_parse(func):
         return func(message, params, *args, **kwargs)
 
     return wrapper
+
+
+def check_publish(data: str):
+    queue = utils.open_json('queue.json')
+
+    if len(queue) >= POST_TIME[data]:
+        publish_quote()
 
 
 def publish_quote():
@@ -656,7 +664,7 @@ if __name__ == '__main__':
         Thread(target=bot.infinity_polling, kwargs={'timeout': 60, 'long_polling_timeout': 60}).start()
 
 for data in POST_TIME:
-    schedule.every().day.at(data).do(publish_quote)
+    schedule.every().day.at(data).do(check_publish, data=data)
 
 schedule.every().day.at('18:00').do(quote_verdict)
 
