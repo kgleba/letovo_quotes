@@ -263,7 +263,7 @@ def help(message):
                '/not_voted – получить ссылки на все цитаты в предложке, за которые ты ещё не проголосовал\n'
     admin_help = '/push [text] – добавление цитаты в очередь\n' \
                  '/edit [id]; [text] – изменение цитаты с заданным номером\n/delete [id] – удаление цитаты с заданным номером\n' \
-                 '/swap [id1]; [id2] – поменять местами две цитаты\n/insert [id] – вставить цитату в заданное место в очереди\n' \
+                 '/swap [id1]; [id2] – поменять местами две цитаты\n/insert [id]; [text] – вставить цитату в заданное место в очереди\n' \
                  '/verdict – вызвать определение вердиктов для всех цитат в предложке'
 
     bot.send_message(message.chat.id, user_help, parse_mode='HTML')
@@ -642,7 +642,7 @@ if __name__ == '__main__':
 
         @server.route('/')
         def ping():
-            return 'Go to /launch to set webhook', 200
+            return 'Go to <a href="/launch">/launch</a> to set webhook', 200
 
 
         @server.route('/updates', methods=['POST'])
@@ -653,8 +653,10 @@ if __name__ == '__main__':
 
         @server.route('/launch')
         def webhook():
+            bot.remove_webhook()
+            time.sleep(0.1)
             bot.set_webhook(url='https://letovo-quotes.herokuapp.com/updates', max_connections=1)
-            return '?', 200
+            return 'Webhook set!', 200
 
 
         webhook()
