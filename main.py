@@ -9,7 +9,8 @@ import utils
 
 TOKEN = os.getenv('BOT_TOKEN')
 RAW_POST_TIME = os.getenv('POST_TIME', '').split()
-POST_TIME = {data: i * 7 for i, data in enumerate(RAW_POST_TIME)}
+POST_TIME = {data: (i + 1) * 7 for i, data in enumerate(RAW_POST_TIME)}
+POST_TIME[RAW_POST_TIME[0]] = 0
 
 CHANNEL_ID = '@letovo_quotes'
 ADMIN_ID = -1001791070494
