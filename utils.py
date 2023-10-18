@@ -1,8 +1,12 @@
+import os
 import re
 import json
 import difflib
 import gitlab
-from config import G_PROJECT, MAX_QUOTE_LEN, G_TOKEN
+
+MAX_QUOTE_LEN = 500
+G_PROJECT = 35046550
+G_TOKEN = os.getenv('GITLAB_PAT')
 
 gl = gitlab.Gitlab('https://gitlab.com', private_token=G_TOKEN)
 project = gl.projects.get(G_PROJECT)
