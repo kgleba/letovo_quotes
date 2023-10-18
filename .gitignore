@@ -13,5 +13,8 @@ banlist.json
 pending.json
 rejected.json
 
+# Config file
+config.py
+
 # Telethon
 telethon/*

@@ -1,4 +1,3 @@
-import os
 import time
 from functools import wraps
 from threading import Thread
@@ -7,33 +6,17 @@ import telebot
 from flask import Flask, request
 import utils
 
-TOKEN = os.getenv('BOT_TOKEN')
-RAW_POST_TIME = os.getenv('POST_TIME', '').split()
-POST_TIME = {data: (i + 1) * 7 for i, data in enumerate(RAW_POST_TIME)}
-POST_TIME[RAW_POST_TIME[0]] = 0
+utils.load_file('queue.json')
+utils.load_file('banlist.json')
+utils.load_file('pending.json')
+utils.load_file('rejected.json')
+utils.load_file('config.py')
 
-CHANNEL_ID = '@letovo_quotes'
-ADMIN_ID = -1001791070494
-VOTING_ID = -1001645253084
-DISCUSSION_ID = -1001742201177
+from config import *
 
-ADMIN_LIST = {1920379812: '@kglebaa', 1095891795: '@dr_platon', 1273466303: '@boris_ber', 1308606295: '@KSPalpatine'}
-MOD_LIST = {1224945213: '@DomineSalvaNos', 1050307229: '@GonSerg', 1711739283: '@Dr_Vortep',
-            1546943628: '@sociolover', 1109859757: '@AlexanderG_Po', 1922122255: '@Timoteo73', 1329271211: '@PolnyaDich'}
-MOD_LIST.update(ADMIN_LIST)
-
-BAN_TIME = 3600
-ACCEPT = 3
-MIN_VOTES = 9
-
-bot = telebot.TeleBot(TOKEN)
+bot = telebot.TeleBot(BOT_TOKEN)
 waiting_for_suggest = {}
 voting_notif_ids = []
-
-utils.load_json('queue.json')
-utils.load_json('banlist.json')
-utils.load_json('pending.json')
-utils.load_json('rejected.json')
 
 
 def format_time(raw):
@@ -457,7 +440,7 @@ def delete(message, args):
     queue = utils.open_json('queue.json')
 
     if quote_id not in queue:
-        bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+        bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
         return
 
     for key in range(int(quote_id), len(queue) - 1):
@@ -543,7 +526,7 @@ def insert(message, args):
     queue = utils.open_json('queue.json')
 
     if quote_id not in queue:
-        bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
+        bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
         return
 
     current_quote = queue[quote_id]
@@ -565,7 +548,7 @@ def text_handler(message):
         handle_quote(message, message.text)
         waiting_for_suggest[author_id] = False
 
-    if message.chat.id == DISCUSSION_ID and message.from_user.username == 'Channel_Bot' and message.sender_chat.title != 'Забавные цитаты Летово':
+    if message.chat.id == DISCUSSION_ID and message.from_user.username == 'Channel_Bot' and message.sender_chat.title != CHANNEL_NAME:
         bot.delete_message(message.chat.id, message.message_id)
         bot.kick_chat_member(message.chat.id, message.from_user.id)
 
@@ -637,7 +620,7 @@ def button_handler(call):
 
 
 if __name__ == '__main__':
-    if 'SERVER' in os.environ:
+    if SERVER:
         server = Flask('__main__')
 
 
@@ -656,12 +639,12 @@ if __name__ == '__main__':
         def webhook():
             bot.remove_webhook()
             time.sleep(0.1)
-            bot.set_webhook(url='https://letovo-quotes.herokuapp.com/updates', max_connections=1)
+            bot.set_webhook(url=WEBHOOK_URL, max_connections=1)
             return 'Webhook set!', 200
 
 
         webhook()
-        Thread(target=server.run, args=('0.0.0.0', os.environ.get('PORT', 80))).start()
+        Thread(target=server.run, args=(SERVER_IP, SERVER_PORT)).start()
     else:
         bot.remove_webhook()
         Thread(target=bot.infinity_polling, kwargs={'timeout': 60, 'long_polling_timeout': 60}).start()
@@ -669,7 +652,7 @@ if __name__ == '__main__':
 for data in POST_TIME:
     schedule.every().day.at(data).do(check_publish, data=data)
 
-schedule.every().day.at('18:00').do(quote_verdict)
+schedule.every().day.at(VERDICT_TIME).do(quote_verdict)
 
 while True:
     schedule.run_pending()

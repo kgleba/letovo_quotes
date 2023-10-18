@@ -1,13 +1,8 @@
-import os
 import re
 import json
 import difflib
 import gitlab
-
-MAX_QUOTE_LEN = 500
-
-G_TOKEN = os.getenv('GITLAB_PAT')
-G_PROJECT = 35046550
+from config import G_PROJECT, MAX_QUOTE_LEN, G_TOKEN
 
 gl = gitlab.Gitlab('https://gitlab.com', private_token=G_TOKEN)
 project = gl.projects.get(G_PROJECT)
@@ -37,12 +32,12 @@ def push_gitlab(filename: str):
     project.commits.create(payload)
 
 
-def load_json(filename: str):
+def load_file(filename: str):
     with open(filename, 'wb') as file:
         try:
             project.files.raw(file_path=filename, ref='main', streamed=True, action=file.write)
         except gitlab.exceptions.GitlabGetError:
-            file.write(b'{}')
+            file.write(b'')
 
 
 def open_json(filename: str) -> dict:
