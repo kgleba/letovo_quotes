@@ -17,7 +17,6 @@ from config import *
 
 bot = telebot.TeleBot(BOT_TOKEN)
 waiting_for_suggest = {}
-voting_notif_ids = []
 
 
 def format_time(raw):
@@ -156,7 +155,7 @@ def not_voted_stat(target: int):
         if target not in quote['reputation']['+'] + quote['reputation']['-']:
             result += f'https://t.me/c/{str(VOTING_ID)[3:]}/{quote["message_id"]}\n'
 
-    return result
+    return result.strip()
 
 
 def quote_verdict():
@@ -227,12 +226,10 @@ def quote_verdict():
         voted_stat_msg += f'{mod}: {stat[1]} ({stat[0]})\n'
 
     bot.send_message(ADMIN_ID, voted_stat_msg)
-    bot.send_message(ADMIN_ID, f'''
-Цитат в предложке до вердикта: {len(pending)}
-Цитат в предложке после вердикта: {len(updated_pending)}
-Принято цитат за вердикт: {accept_quo}
-Отклонено цитат за вердикт: {reject_quo}
-''')
+    bot.send_message(ADMIN_ID, f'Цитат в предложке до вердикта: {len(pending)}'
+                               f'Цитат в предложке после вердикта: {len(updated_pending)}'
+                               f'Принято цитат за вердикт: {accept_quo}'
+                               f'Отклонено цитат за вердикт: {reject_quo}')
 
 
 @bot.message_handler(commands=['start'])
