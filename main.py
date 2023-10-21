@@ -1,4 +1,5 @@
 import time
+from datetime import datetime, timedelta
 from functools import wraps
 from threading import Thread
 import schedule
@@ -147,16 +148,26 @@ def handle_quote(message, quote):
     utils.save_json(pending, 'pending.json')
 
 
+def not_voted_stat(target: int):
+    pending = utils.open_json('pending.json')
+    result = ''
+
+    for quote in pending.values():
+        if target not in quote['reputation']['+'] + quote['reputation']['-']:
+            result += f'https://t.me/c/{str(VOTING_ID)[3:]}/{quote["message_id"]}\n'
+
+    return result
+
+
 def quote_verdict():
     pending = utils.open_json('pending.json')
 
-    for notif_id in voting_notif_ids:
-        try:
-            bot.delete_message(VOTING_ID, notif_id)
-        except telebot.apihelper.ApiTelegramException:
-            print(f'Не удалось удалить сообщение с ID {notif_id}')
+    voted_stat = {}
+    for mod_id, mod_nick in MOD_LIST.items():
+        voted_stat[mod_nick] = voted_stat.get(mod_nick, []) + [len(not_voted_stat(mod_id).split('\n'))]
 
-    voting_notif_ids.clear()
+    accept_quo, reject_quo = 0, 0
+
     updated_pending = {}
 
     for key, quote in pending.items():
@@ -167,16 +178,7 @@ def quote_verdict():
         reputation = len(quote['reputation']['+']) - len(quote['reputation']['-'])
 
         if len(quote['reputation']['+']) + len(quote['reputation']['-']) < MIN_VOTES:
-            not_voted_quotes = set(MOD_LIST) - set(quote['reputation']['+'] + quote['reputation']['-'])
-            if not_voted_quotes:
-                sent_notif = bot.send_message(VOTING_ID, 'Цитата не набрала нужного количества голосов. '
-                                              + ' '.join(MOD_LIST[mod] for mod in not_voted_quotes)
-                                              + ', проголосуйте за нее, пожалуйста!',
-                                              disable_notification=True, reply_to_message_id=message_id)
-                voting_notif_ids.append(sent_notif.message_id)
-
             updated_pending.update({key: quote})
-
         elif reputation < ACCEPT:
             bot.edit_message_text(
                 f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
@@ -194,6 +196,7 @@ def quote_verdict():
                 rejected.update({'0': [quote_text, reputation]})
             utils.save_json(rejected, 'rejected.json')
 
+            reject_quo += 1
         else:
             bot.edit_message_text(
                 f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
@@ -208,7 +211,28 @@ def quote_verdict():
             queue.update({str(len(queue)): quote_text})
             utils.save_json(queue, 'queue.json')
 
+            accept_quo += 1
+
     utils.save_json(updated_pending, 'pending.json')
+
+    for mod_id, mod_nick in MOD_LIST.items():
+        not_voted_mod_stat = not_voted_stat(mod_id)
+        voted_stat[mod_nick] = voted_stat.get(mod_nick, []) + [len(not_voted_mod_stat.split('\n'))]
+
+        if not_voted_mod_stat:
+            bot.send_message(mod_id, 'Ты не проголосовал за следующие цитаты:\n' + not_voted_mod_stat)
+
+    voted_stat_msg = 'Непроголосованные цитаты\nМодератор: осталось (всего)\n\n'
+    for mod, stat in voted_stat.items():
+        voted_stat_msg += f'{mod}: {stat[1]} ({stat[0]})\n'
+
+    bot.send_message(ADMIN_ID, voted_stat_msg)
+    bot.send_message(ADMIN_ID, f'''
+Цитат в предложке до вердикта: {len(pending)}
+Цитат в предложке после вердикта: {len(updated_pending)}
+Принято цитат за вердикт: {accept_quo}
+Отклонено цитат за вердикт: {reject_quo}
+''')
 
 
 @bot.message_handler(commands=['start'])
@@ -306,12 +330,7 @@ def not_voted(message, args):
             bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
             return
 
-    pending = utils.open_json('pending.json')
-    result = ''
-
-    for quote in pending.values():
-        if user_id not in quote['reputation']['+'] + quote['reputation']['-']:
-            result += f'https://t.me/c/{str(VOTING_ID)[3:]}/{quote["message_id"]}\n'
+    result = not_voted_stat(user_id)
 
     if result:
         bot.send_message(message.chat.id, 'Ты не проголосовал за следующие цитаты:\n' + result)
@@ -558,6 +577,13 @@ def button_handler(call):
     action = call.data.split(':')
 
     if action[0] not in ('upvote', 'downvote', 'reject'):
+        return
+
+    lower_bound = datetime.strptime(VERDICT_TIME, '%H:%M')
+    upper_bound = lower_bound + timedelta(minutes=1)
+
+    if lower_bound.time() <= datetime.now().time() <= upper_bound.time():
+        bot.answer_callback_query(call.id, 'Сейчас не время голосовать!')
         return
 
     pending = utils.open_json('pending.json')
