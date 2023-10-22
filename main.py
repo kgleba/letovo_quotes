@@ -19,8 +19,8 @@ bot = telebot.TeleBot(BOT_TOKEN)
 waiting_for_suggest = {}
 
 
-def format_time(raw):
-    return time.strftime('%H:%M:%S', time.gmtime(raw))
+def format_time(raw: int):
+    return str(timedelta(seconds=raw))
 
 
 def mod_feature(func):
@@ -163,7 +163,7 @@ def quote_verdict():
 
     voted_stat = {}
     for mod_id, mod_nick in MOD_LIST.items():
-        voted_stat[mod_nick] = voted_stat.get(mod_nick, []) + [len(not_voted_stat(mod_id).split('\n'))]
+        voted_stat[mod_nick] = voted_stat.get(mod_nick, []) + [len(not_voted_stat(mod_id).splitlines())]
 
     accept_quo, reject_quo = 0, 0
 
@@ -216,7 +216,7 @@ def quote_verdict():
 
     for mod_id, mod_nick in MOD_LIST.items():
         not_voted_mod_stat = not_voted_stat(mod_id)
-        voted_stat[mod_nick] = voted_stat.get(mod_nick, []) + [len(not_voted_mod_stat.split('\n'))]
+        voted_stat[mod_nick] = voted_stat.get(mod_nick, []) + [len(not_voted_mod_stat.splitlines())]
 
         if not_voted_mod_stat:
             bot.send_message(mod_id, 'Ты не проголосовал за следующие цитаты:\n' + not_voted_mod_stat)
@@ -226,9 +226,9 @@ def quote_verdict():
         voted_stat_msg += f'{mod}: {stat[1]} ({stat[0]})\n'
 
     bot.send_message(ADMIN_ID, voted_stat_msg)
-    bot.send_message(ADMIN_ID, f'Цитат в предложке до вердикта: {len(pending)}'
-                               f'Цитат в предложке после вердикта: {len(updated_pending)}'
-                               f'Принято цитат за вердикт: {accept_quo}'
+    bot.send_message(ADMIN_ID, f'Цитат в предложке до вердикта: {len(pending)}\n'
+                               f'Цитат в предложке после вердикта: {len(updated_pending)}\n'
+                               f'Принято цитат за вердикт: {accept_quo}\n'
                                f'Отклонено цитат за вердикт: {reject_quo}')
 
 
@@ -263,7 +263,7 @@ def help(message):
     waiting_for_suggest[message.from_user.id] = False
     user_help = '<b>Пользовательские команды:</b>\n/start – запуск бота\n/help – вызов этого сообщения\n' \
                 '/suggest – предложить цитату\n/suggest_rollback – откатить последнюю предложенную цитату'
-    mod_help = '<b>Админские команды:</b>\n/ban [id]; [reason]; [duration in sec, 3600 by default] – блокировка пользователя\n/unban [id]; [reason] - разблокировка пользователя\n' \
+    mod_help = '<b>Админские команды:</b>\n/ban [id]; [reason]; [duration in hours, 1 by default] – блокировка пользователя\n/unban [id]; [reason] - разблокировка пользователя\n' \
                '/get_banlist – список заблокированных в данный момент пользователей\n/get – текущая очередь цитат на публикацию\n' \
                '/not_voted – получить ссылки на все цитаты в предложке, за которые ты ещё не проголосовал\n'
     admin_help = '/push [text] – добавление цитаты в очередь\n' \
@@ -358,11 +358,17 @@ def ban(message, args):
         bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
         return
 
+    banlist = utils.open_json('banlist.json')
+    if user_id in banlist:
+        bot.send_message(message.chat.id, f'Пользователь {user_id} уже заблокирован!')
+        return
+
+    period *= 3600
+
     banned_log = bot.send_message(ADMIN_ID,
                                   f'Модератор @{message.from_user.username} заблокировал пользователя {user_id} на {format_time(period)} по причине "{reason}"')
     bot.pin_chat_message(ADMIN_ID, banned_log.message_id)
 
-    banlist = utils.open_json('banlist.json')
     banlist.update({user_id: int(time.time()) + period})
     utils.save_json(banlist, 'banlist.json')
 
@@ -443,7 +449,7 @@ def get_banlist(message):
     bot.send_message(message.chat.id, 'ID пользователя: время разблокировки')
 
     for key, value in banlist.items():
-        bot.send_message(message.chat.id, key + ': ' + format_time(int(value)))
+        bot.send_message(message.chat.id, key + ': ' + format_time(int(value - time.time())))
 
 
 @bot.message_handler(commands=['delete'])
