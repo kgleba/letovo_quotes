@@ -23,7 +23,7 @@ def push_gitlab(filename: str):
 
     payload = {
         'branch': 'main',
-        'commit_message': 'Update',
+        'commit_message': f'Update {filename}',
         'actions': [
             {
                 'action': action,

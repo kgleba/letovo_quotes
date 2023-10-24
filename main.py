@@ -111,7 +111,7 @@ def handle_quote(message, quote):
         bot.send_message(message.chat.id, 'Цитата должна содержать хештег!')
         return
 
-    if len(quote) >= 500:
+    if len(quote) >= utils.MAX_QUOTE_LEN:
         bot.send_message(message.chat.id, 'Отправленная цитата слишком большая!')
         return
 
@@ -163,7 +163,7 @@ def quote_verdict():
 
     voted_stat = {}
     for mod_id, mod_nick in MOD_LIST.items():
-        voted_stat[mod_nick] = voted_stat.get(mod_nick, []) + [len(not_voted_stat(mod_id).splitlines())]
+        voted_stat[mod_nick] = [len(not_voted_stat(mod_id).splitlines())]
 
     accept_quo, reject_quo = 0, 0
 
@@ -172,8 +172,7 @@ def quote_verdict():
     for key, quote in pending.items():
         quote_text = quote['text']
         message_id = quote['message_id']
-        author_id = quote['source'][0]
-        source_id = quote['source'][1]
+        author_id, source_id = quote['source']
         reputation = len(quote['reputation']['+']) - len(quote['reputation']['-'])
 
         if len(quote['reputation']['+']) + len(quote['reputation']['-']) < MIN_VOTES:
@@ -216,16 +215,16 @@ def quote_verdict():
 
     for mod_id, mod_nick in MOD_LIST.items():
         not_voted_mod_stat = not_voted_stat(mod_id)
-        voted_stat[mod_nick] = voted_stat.get(mod_nick, []) + [len(not_voted_mod_stat.splitlines())]
+        voted_stat[mod_nick] += [len(not_voted_mod_stat.splitlines())]
 
         if not_voted_mod_stat:
             bot.send_message(mod_id, 'Ты не проголосовал за следующие цитаты:\n' + not_voted_mod_stat)
 
-    voted_stat_msg = 'Непроголосованные цитаты\nМодератор: осталось (всего)\n\n'
+    voted_stat_msg = '*Непроголосованные цитаты*\nМодератор: осталось (всего)\n\n'
     for mod, stat in voted_stat.items():
-        voted_stat_msg += f'{mod}: {stat[1]} ({stat[0]})\n'
+        voted_stat_msg += f'`{mod}`: {stat[1]} ({stat[0]})\n'
 
-    bot.send_message(ADMIN_ID, voted_stat_msg)
+    bot.send_message(ADMIN_ID, voted_stat_msg, parse_mode='MarkdownV2')
     bot.send_message(ADMIN_ID, f'Цитат в предложке до вердикта: {len(pending)}\n'
                                f'Цитат в предложке после вердикта: {len(updated_pending)}\n'
                                f'Принято цитат за вердикт: {accept_quo}\n'
@@ -298,7 +297,6 @@ def suggest_rollback(message):
             bot.send_message(message.chat.id, 'Успешно отозвал твою последнюю предложенную цитату!')
 
             utils.save_json(pending, 'pending.json')
-
             return
 
 
@@ -344,7 +342,7 @@ def ban(message, args):
         user_id, reason, period = args
 
         if not period.isdigit():
-            bot.send_message(message.chat.id, 'Введи корректное значение срока блокировки!')
+            bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
             return
         period = int(period)
     elif len(args) == 2:
@@ -355,7 +353,7 @@ def ban(message, args):
         return
 
     if not user_id.isdigit():
-        bot.send_message(message.chat.id, 'Введи корректное значение идентификатора!')
+        bot.send_message(message.chat.id, 'Проверь корректность аргументов!')
         return
 
     banlist = utils.open_json('banlist.json')
@@ -408,7 +406,7 @@ def unban(message, args):
 @admin_feature
 @private_chat
 def push(message, args):
-    quote = args[0]
+    quote = '; '.join(args)
 
     if not quote:
         bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
@@ -583,7 +581,7 @@ def button_handler(call):
         return
 
     lower_bound = datetime.strptime(VERDICT_TIME, '%H:%M')
-    upper_bound = lower_bound + timedelta(minutes=1)
+    upper_bound = lower_bound + timedelta(seconds=20)
 
     if lower_bound.time() <= datetime.now().time() <= upper_bound.time():
         bot.answer_callback_query(call.id, 'Сейчас не время голосовать!')
