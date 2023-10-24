@@ -220,11 +220,11 @@ def quote_verdict():
         if not_voted_mod_stat:
             bot.send_message(mod_id, 'Ты не проголосовал за следующие цитаты:\n' + not_voted_mod_stat)
 
-    voted_stat_msg = '*Непроголосованные цитаты*\nМодератор: осталось (всего)\n\n'
+    voted_stat_msg = '<b>Непроголосованные цитаты</b>\nМодератор: осталось (всего)\n\n'
     for mod, stat in voted_stat.items():
-        voted_stat_msg += f'`{mod}`: {stat[1]} ({stat[0]})\n'
+        voted_stat_msg += f'<code>{mod}</code>: {stat[1]} ({stat[0]})\n'
 
-    bot.send_message(ADMIN_ID, voted_stat_msg, parse_mode='MarkdownV2')
+    bot.send_message(ADMIN_ID, voted_stat_msg, parse_mode='HTML')
     bot.send_message(ADMIN_ID, f'Цитат в предложке до вердикта: {len(pending)}\n'
                                f'Цитат в предложке после вердикта: {len(updated_pending)}\n'
                                f'Принято цитат за вердикт: {accept_quo}\n'
