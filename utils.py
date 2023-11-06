@@ -1,7 +1,9 @@
+import datetime
+import difflib
+import json
 import os
 import re
-import json
-import difflib
+
 import gitlab
 
 MAX_QUOTE_LEN = 500
@@ -24,7 +26,7 @@ def push_gitlab(filename: str):
 
     payload = {
         'branch': 'main',
-        'commit_message': f'Update {filename}',
+        'commit_message': f'{action.capitalize()} {filename}',
         'actions': [
             {
                 'action': action,
@@ -94,6 +96,10 @@ def reformat_quote(text: str):
 
 def check_similarity(text_1: str, text_2: str):
     return difflib.SequenceMatcher(lambda symbol: symbol in (' ', '\n', '\t'), text_1, text_2).ratio() * 100
+
+
+def format_time(raw: int):
+    return str(datetime.timedelta(seconds=raw))
 
 
 reload_files()

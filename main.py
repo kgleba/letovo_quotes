@@ -2,18 +2,16 @@ import time
 from datetime import datetime, timedelta
 from functools import wraps
 from threading import Thread
+
 import schedule
 import telebot
 from flask import Flask, request
+
 import utils
 from config import *
 
 bot = telebot.TeleBot(BOT_TOKEN)
 waiting_for_suggest = {}
-
-
-def format_time(raw: int):
-    return str(timedelta(seconds=raw))
 
 
 def mod_feature(func):
@@ -57,10 +55,10 @@ def arg_parse(func):
     return wrapper
 
 
-def check_publish(data: str):
+def check_publish(publish_date: str):
     queue = utils.open_json('queue.json')
 
-    if len(queue) >= POST_TIME[data]:
+    if len(queue) >= POST_TIME[publish_date]:
         publish_quote()
 
 
@@ -97,7 +95,7 @@ def handle_quote(message, quote):
             utils.save_json(banlist, 'banlist.json')
         else:
             bot.send_message(message.chat.id,
-                             f'Ты был заблокирован, поэтому не можешь предлагать цитаты. Оставшееся время блокировки: {format_time(banlist[author_id] - int(time.time()))}')
+                             f'Ты был заблокирован, поэтому не можешь предлагать цитаты. Оставшееся время блокировки: {utils.format_time(banlist[author_id] - int(time.time()))}')
             return
 
     if '#' not in quote:
@@ -366,13 +364,13 @@ def ban(message, args):
     period *= 3600
 
     banned_log = bot.send_message(ADMIN_ID,
-                                  f'Модератор @{message.from_user.username} заблокировал пользователя {user_id} на {format_time(period)} по причине "{reason}"')
+                                  f'Модератор @{message.from_user.username} заблокировал пользователя {user_id} на {utils.format_time(period)} по причине "{reason}"')
     bot.pin_chat_message(ADMIN_ID, banned_log.message_id)
 
     banlist.update({user_id: int(time.time()) + period})
     utils.save_json(banlist, 'banlist.json')
 
-    bot.send_message(user_id, f'Ты был заблокирован по причине {reason}. Оставшееся время блокировки: {format_time(period)}')
+    bot.send_message(user_id, f'Ты был заблокирован по причине {reason}. Оставшееся время блокировки: {utils.format_time(period)}')
     bot.send_message(message.chat.id, f'Пользователь {user_id} успешно заблокирован!')
 
 
@@ -449,7 +447,7 @@ def get_banlist(message):
     bot.send_message(message.chat.id, 'ID пользователя: время разблокировки')
 
     for key, value in banlist.items():
-        bot.send_message(message.chat.id, key + ': ' + format_time(max(0, int(value - time.time()))))
+        bot.send_message(message.chat.id, key + ': ' + utils.format_time(max(0, int(value - time.time()))))
 
 
 @bot.message_handler(commands=['delete'])
@@ -678,8 +676,8 @@ if __name__ == '__main__':
         bot.remove_webhook()
         Thread(target=bot.infinity_polling, kwargs={'timeout': 60, 'long_polling_timeout': 60}).start()
 
-for data in POST_TIME:
-    schedule.every().day.at(data).do(check_publish, data=data)
+for date in POST_TIME:
+    schedule.every().day.at(date).do(check_publish, data=date)
 
 schedule.every().day.at(VERDICT_TIME).do(quote_verdict)
 
