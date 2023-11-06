@@ -449,7 +449,7 @@ def get_banlist(message):
     bot.send_message(message.chat.id, 'ID пользователя: время разблокировки')
 
     for key, value in banlist.items():
-        bot.send_message(message.chat.id, key + ': ' + format_time(max(0, int(value - time.time())))
+        bot.send_message(message.chat.id, key + ': ' + format_time(max(0, int(value - time.time()))))
 
 
 @bot.message_handler(commands=['delete'])
