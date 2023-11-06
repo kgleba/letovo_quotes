@@ -6,13 +6,6 @@ import schedule
 import telebot
 from flask import Flask, request
 import utils
-
-utils.load_file('queue.json')
-utils.load_file('banlist.json')
-utils.load_file('pending.json')
-utils.load_file('rejected.json')
-utils.load_file('config.py')
-
 from config import *
 
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -150,10 +143,12 @@ def handle_quote(message, quote):
 def not_voted_stat(target: int):
     pending = utils.open_json('pending.json')
     result = ''
+    quotes_count = 1
 
     for quote in pending.values():
         if target not in quote['reputation']['+'] + quote['reputation']['-']:
-            result += f'https://t.me/c/{str(VOTING_ID)[3:]}/{quote["message_id"]}\n'
+            result += f'{quotes_count}. https://t.me/c/{str(VOTING_ID)[3:]}/{quote["message_id"]}\n'
+            quotes_count += 1
 
     return result.strip()
 
@@ -268,7 +263,7 @@ def help(message):
     admin_help = '/push [text] – добавление цитаты в очередь\n' \
                  '/edit [id]; [text] – изменение цитаты с заданным номером\n/delete [id] – удаление цитаты с заданным номером\n' \
                  '/swap [id1]; [id2] – поменять местами две цитаты\n/insert [id]; [text] – вставить цитату в заданное место в очереди\n' \
-                 '/verdict – вызвать определение вердиктов для всех цитат в предложке'
+                 '/verdict – вызвать определение вердиктов для всех цитат в предложке\n/reload – перезагрузить файлы из облака'
 
     bot.send_message(message.chat.id, user_help, parse_mode='HTML')
 
@@ -305,6 +300,13 @@ def suggest_rollback(message):
 @private_chat
 def verdict(message):
     quote_verdict()
+
+
+@bot.message_handler(commands=['reload'])
+@admin_feature
+@private_chat
+def reload(message):
+    utils.reload_files()
 
 
 @bot.message_handler(commands=['not_voted'])
@@ -447,7 +449,7 @@ def get_banlist(message):
     bot.send_message(message.chat.id, 'ID пользователя: время разблокировки')
 
     for key, value in banlist.items():
-        bot.send_message(message.chat.id, key + ': ' + format_time(int(value - time.time())))
+        bot.send_message(message.chat.id, key + ': ' + format_time(max(0, int(value - time.time())))
 
 
 @bot.message_handler(commands=['delete'])

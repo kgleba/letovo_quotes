@@ -19,6 +19,7 @@
 4. `/swap` – swap two quotes in the queue
 5. `/insert` – insert a quote into the queue
 6. `/verdict` – get verdicts for all quotes in the queue
+7. `/reload` – reload files from cloud storage
 
 All data is stored in a GitLab repository.
 Quotes are posted automatically at a set time.

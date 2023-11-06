@@ -7,6 +7,7 @@ import gitlab
 MAX_QUOTE_LEN = 500
 G_PROJECT = 35046550
 G_TOKEN = os.getenv('GITLAB_PAT')
+FILES = ['queue.json', 'banlist.json', 'pending.json', 'rejected.json', 'config.py']
 
 gl = gitlab.Gitlab('https://gitlab.com', private_token=G_TOKEN)
 project = gl.projects.get(G_PROJECT)
@@ -42,6 +43,11 @@ def load_file(filename: str):
             project.files.raw(file_path=filename, ref='main', streamed=True, action=file.write)
         except gitlab.exceptions.GitlabGetError:
             file.write(b'')
+
+
+def reload_files():
+    for filename in FILES:
+        load_file(filename)
 
 
 def open_json(filename: str) -> dict:
@@ -88,3 +94,6 @@ def reformat_quote(text: str):
 
 def check_similarity(text_1: str, text_2: str):
     return difflib.SequenceMatcher(lambda symbol: symbol in (' ', '\n', '\t'), text_1, text_2).ratio() * 100
+
+
+reload_files()
