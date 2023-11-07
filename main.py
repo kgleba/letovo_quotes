@@ -677,7 +677,7 @@ if __name__ == '__main__':
         Thread(target=bot.infinity_polling, kwargs={'timeout': 60, 'long_polling_timeout': 60}).start()
 
 for date in POST_TIME:
-    schedule.every().day.at(date).do(check_publish, data=date)
+    schedule.every().day.at(date).do(check_publish, publish_date=date)
 
 schedule.every().day.at(VERDICT_TIME).do(quote_verdict)
 
