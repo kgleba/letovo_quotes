@@ -6,7 +6,6 @@ import re
 
 import gitlab
 
-MAX_QUOTE_LEN = 500
 G_PROJECT = 35046550
 G_TOKEN = os.getenv('GITLAB_PAT')
 FILES = ['queue.json', 'banlist.json', 'pending.json', 'rejected.json', 'config.py']
@@ -69,8 +68,13 @@ def save_json(data, filename: str):
 
 
 def reformat_quote(text: str):
+    from config import MAX_QUOTE_LEN, REJECTED_AUTHORS
+
     if '#' not in text:
-        return text
+        raise ValueError('Hashtag is not in text')
+
+    if len(text) >= MAX_QUOTE_LEN:
+        raise ValueError('Text is too long')
 
     text = text.strip()
     text = re.sub(r'^[ \n]*', r'', text)
@@ -81,13 +85,18 @@ def reformat_quote(text: str):
 
     tag = ''
     while '#' in text:
-        start = text.find('#')
+        start = text.find('#') + 1
         stop_symbols = (' ', '\n', '\t', '#')
-        next_stop = [text.find(symbol, start + 1) % MAX_QUOTE_LEN for symbol in stop_symbols]
+        next_stop = [text.find(symbol, start) % MAX_QUOTE_LEN for symbol in stop_symbols]
         end = min(next_stop)
 
-        tag += f'{text[start:end]} '
-        text = text[:start].rstrip() + text[end:]
+        author = text[start:end].capitalize().replace('ё', 'е')
+
+        if author in REJECTED_AUTHORS:
+            raise ValueError('Author is rejected')
+
+        tag += f'#{author} '
+        text = text[:start - 1].rstrip() + text[end:]
 
     text += f'\n\n{tag}'
 

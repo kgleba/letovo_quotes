@@ -78,11 +78,33 @@ def publish_quote():
     utils.save_json(queue, 'queue.json')
 
 
+def generate_keyboard(content: dict[str, str]):
+    keyboard = telebot.types.InlineKeyboardMarkup()
+
+    for text, callback_data in content.items():
+        keyboard.add(telebot.types.InlineKeyboardButton(text=text, callback_data=callback_data))
+
+    return keyboard
+
+
 def handle_quote(message, quote):
     author = message.from_user
     author_name = author.username
     author_id = str(author.id)
-    quote = utils.reformat_quote(quote)
+
+    try:
+        quote = utils.reformat_quote(quote)
+    except ValueError as e:
+        match str(e):
+            case 'Author is rejected':
+                bot.send_message(message.chat.id, 'К сожалению, автор попросил нас не выкладывать его цитаты в канал :(')
+            case 'Hashtag is not in text':
+                bot.send_message(message.chat.id, 'Цитата должна содержать хештег!')
+            case 'Text is too long':
+                bot.send_message(message.chat.id, 'Отправленная цитата слишком большая!')
+            case _:
+                print(e)
+        return
 
     if author_name is None:
         author_name = author.first_name + ' ' + author.last_name
@@ -97,14 +119,6 @@ def handle_quote(message, quote):
             bot.send_message(message.chat.id,
                              f'Ты был заблокирован, поэтому не можешь предлагать цитаты. Оставшееся время блокировки: {utils.format_time(banlist[author_id] - int(time.time()))}')
             return
-
-    if '#' not in quote:
-        bot.send_message(message.chat.id, 'Цитата должна содержать хештег!')
-        return
-
-    if len(quote) >= utils.MAX_QUOTE_LEN:
-        bot.send_message(message.chat.id, 'Отправленная цитата слишком большая!')
-        return
 
     pending = utils.open_json('pending.json')
 
@@ -121,11 +135,8 @@ def handle_quote(message, quote):
     else:
         call_count = 0
 
-    keyboard = telebot.types.InlineKeyboardMarkup()
-    keyboard.add(telebot.types.InlineKeyboardButton(text='➕ За', callback_data=f'upvote: {call_count}'))
-    keyboard.add(telebot.types.InlineKeyboardButton(text='➖ Против', callback_data=f'downvote: {call_count}'))
-    keyboard.add(telebot.types.InlineKeyboardButton(text='🚫 Отклонить (только администраторы)',
-                                                    callback_data=f'reject: {call_count}'))
+    keyboard = generate_keyboard({'➕ За': f'upvote: {call_count}', '➖ Против': f'downvote: {call_count}',
+                                  '🚫 Отклонить (только администраторы)': f'suggest_reject: {call_count}'})
 
     sent_quote = bot.send_message(VOTING_ID,
                                   f'Пользователь @{author_name} [ID: {author_id}] предложил следующую цитату:\n\n{quote}',
@@ -176,9 +187,9 @@ def quote_verdict():
                 f'предложил следующую цитату:\n\n{quote_text}\n\nОтклонено модерацией с рейтингом {reputation}',
                 VOTING_ID, message_id, reply_markup=None)
             try:
-                bot.send_message(author_id, 'Твоя цитата была отклонена :(', reply_to_message_id=source_id)
+                bot.send_message(author_id, 'Твоя цитата была отклонена на голосовании :(', reply_to_message_id=source_id)
             except telebot.apihelper.ApiTelegramException:
-                bot.send_message(author_id, 'Твоя цитата была отклонена :(')
+                bot.send_message(author_id, 'Твоя цитата была отклонена на голосовании :(')
 
             rejected = utils.open_json('rejected.json')
             if rejected:
@@ -296,14 +307,14 @@ def suggest_rollback(message):
 @bot.message_handler(commands=['verdict'])
 @admin_feature
 @private_chat
-def verdict(message):
+def verdict(_):
     quote_verdict()
 
 
 @bot.message_handler(commands=['reload'])
 @admin_feature
 @private_chat
-def reload(message):
+def reload(_):
     utils.reload_files()
 
 
@@ -405,7 +416,7 @@ def unban(message, args):
 @arg_parse
 @admin_feature
 @private_chat
-def push(message, args):
+def push(_, args):
     quote = '; '.join(args)
 
     if not quote:
@@ -454,7 +465,7 @@ def get_banlist(message):
 @arg_parse
 @admin_feature
 @private_chat
-def delete(message, args):
+def delete(_, args):
     quote_id = args[0]
 
     queue = utils.open_json('queue.json')
@@ -515,7 +526,7 @@ def edit(message, args):
 @arg_parse
 @admin_feature
 @private_chat
-def swap(message, args):
+def swap(_, args):
     if len(args) != 2:
         bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
         return
@@ -537,7 +548,7 @@ def swap(message, args):
 @arg_parse
 @admin_feature
 @private_chat
-def insert(message, args):
+def insert(_, args):
     if len(args) != 2:
         bot.send_message(ADMIN_ID, 'Проверь корректность аргументов!')
         return
@@ -575,9 +586,9 @@ def text_handler(message):
 
 @bot.callback_query_handler(func=lambda call: True)
 def button_handler(call):
-    action = call.data.split(':')
+    action = call.data.split(': ')
 
-    if action[0] not in ('upvote', 'downvote', 'reject'):
+    if action[0] not in ('upvote', 'downvote', 'reject', 'suggest_reject'):
         return
 
     lower_bound = datetime.strptime(VERDICT_TIME, '%H:%M')
@@ -592,8 +603,7 @@ def button_handler(call):
     quote_id = action[1].replace(' ', '')
 
     if quote_id not in pending:
-        bot.reply_to(call.message,
-                     'Возникла проблема с обработкой цитаты :( Если это необходимо, проведи ее вручную.')
+        bot.reply_to(call.message, 'Возникла проблема с обработкой цитаты :( Если это необходимо, проведи ее вручную.')
         return
 
     author_id = pending[quote_id]['source'][0]
@@ -622,15 +632,43 @@ def button_handler(call):
 
         pending[quote_id]['reputation'][current_vote[0]].append(call.from_user.id)
 
+    elif action[0] == 'suggest_reject' and call.from_user.id in ADMIN_LIST:
+        keyboard = generate_keyboard({'🤬 Цензура': f'reject: {quote_id}: censorship', '🤷 Что-то пошло не так': f'reject: {quote_id}: fail',
+                                      '📜 Дубликат': f'reject: {quote_id}: duplicate', '💬 Флуд': f'reject: {quote_id}: flood',
+                                      '👤 Отсутствие автора': f'reject: {quote_id}: unknown_author', '🚫 Отмена': f'reject: {quote_id}: cancel'})
+
+        bot.edit_message_text(call.message.text, VOTING_ID, call.message.id, reply_markup=keyboard)
+
     elif action[0] == 'reject' and call.from_user.id in ADMIN_LIST:
+        reason = action[2]
+        match reason:
+            case 'censorship':
+                reason = 'того, что не прошла цензуру .-.'
+            case 'fail':
+                reason = 'того, что что-то пошло не так; мы обязательно разберемся – быть может, твоя цитата уже в очереди!'
+            case 'duplicate':
+                reason = 'того, что такая цитата уже есть в очереди или предложке ;D'
+            case 'flood':
+                reason = 'того, что она не является цитатой :('
+            case 'unknown_author':
+                reason = 'того, что автор цитаты неизвестен :('
+            case 'cancel':
+                keyboard = generate_keyboard({'➕ За': f'upvote: {quote_id}', '➖ Против': f'downvote: {quote_id}',
+                                              '🚫 Отклонить (только администраторы)': f'suggest_reject: {quote_id}'})
+
+                bot.edit_message_text(call.message.text, VOTING_ID, call.message.id, reply_markup=keyboard)
+                return
+            case _:
+                return
+
         rejected = utils.open_json('rejected.json')
 
-        bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username}', VOTING_ID,
+        bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username} по причине {reason}', VOTING_ID,
                               call.message.id, reply_markup=None)
         try:
-            bot.send_message(author_id, 'Твоя цитата была отклонена :(', reply_to_message_id=source_id)
+            bot.send_message(author_id, f'Твоя цитата была отклонена по причине {reason}', reply_to_message_id=source_id)
         except telebot.apihelper.ApiTelegramException:
-            bot.send_message(author_id, 'Твоя цитата была отклонена :(')
+            bot.send_message(author_id, f'Твоя цитата была отклонена по причине {reason}')
 
         if rejected:
             rejected.update({str(max(map(int, rejected)) + 1): call.message.text})
