@@ -8,7 +8,10 @@ import telebot
 from flask import Flask, request
 
 import utils
+from data_sessions import SessionManager, sessioned_data
 from config import *
+
+manager = SessionManager()
 
 bot = telebot.TeleBot(BOT_TOKEN)
 waiting_for_suggest = {}
@@ -55,6 +58,7 @@ def arg_parse(func):
     return wrapper
 
 
+@sessioned_data(manager, 'queue.json')
 def check_publish(publish_date: str):
     queue = utils.open_json('queue.json')
 
@@ -62,6 +66,7 @@ def check_publish(publish_date: str):
         publish_quote()
 
 
+@sessioned_data(manager, 'queue.json')
 def publish_quote():
     queue = utils.open_json('queue.json')
 
@@ -87,6 +92,8 @@ def generate_keyboard(content: dict[str, str]):
     return keyboard
 
 
+@sessioned_data(manager, 'banlist.json')
+@sessioned_data(manager, 'pending.json')
 def handle_quote(message, quote):
     author = message.from_user
     author_name = author.username
@@ -97,7 +104,8 @@ def handle_quote(message, quote):
     except ValueError as e:
         match str(e):
             case 'Author is rejected':
-                bot.send_message(message.chat.id, 'К сожалению, автор попросил нас не выкладывать его цитаты в канал :(')
+                bot.send_message(message.chat.id,
+                                 'К сожалению, автор попросил нас не выкладывать его цитаты в канал :(')
             case 'Hashtag is not in text':
                 bot.send_message(message.chat.id, 'Цитата должна содержать хештег!')
             case 'Text is too long':
@@ -149,6 +157,7 @@ def handle_quote(message, quote):
     utils.save_json(pending, 'pending.json')
 
 
+@sessioned_data(manager, 'pending.json')
 def not_voted_stat(target: int):
     pending = utils.open_json('pending.json')
     result = ''
@@ -162,6 +171,9 @@ def not_voted_stat(target: int):
     return result.strip()
 
 
+@sessioned_data(manager, 'pending.json')
+@sessioned_data(manager, 'rejected.json')
+@sessioned_data(manager, 'queue.json')
 def quote_verdict():
     pending = utils.open_json('pending.json')
 
@@ -187,7 +199,8 @@ def quote_verdict():
                 f'предложил следующую цитату:\n\n{quote_text}\n\nОтклонено модерацией с рейтингом {reputation}',
                 VOTING_ID, message_id, reply_markup=None)
             try:
-                bot.send_message(author_id, 'Твоя цитата была отклонена на голосовании :(', reply_to_message_id=source_id)
+                bot.send_message(author_id, 'Твоя цитата была отклонена на голосовании :(',
+                                 reply_to_message_id=source_id)
             except telebot.apihelper.ApiTelegramException:
                 bot.send_message(author_id, 'Твоя цитата была отклонена на голосовании :(')
 
@@ -205,7 +218,8 @@ def quote_verdict():
                 f'предложил следующую цитату:\n\n{quote_text}\n\nОпубликовано модерацией с рейтингом {reputation}',
                 VOTING_ID, message_id, reply_markup=None)
             try:
-                bot.send_message(author_id, 'Твоя цитата отправлена в очередь на публикацию!', reply_to_message_id=source_id)
+                bot.send_message(author_id, 'Твоя цитата отправлена в очередь на публикацию!',
+                                 reply_to_message_id=source_id)
             except telebot.apihelper.ApiTelegramException:
                 bot.send_message(author_id, 'Твоя цитата отправлена в очередь на публикацию!')
 
@@ -283,6 +297,7 @@ def help(message):
 
 
 @bot.message_handler(commands=['suggest_rollback'])
+@sessioned_data(manager, 'pending.json')
 @private_chat
 def suggest_rollback(message):
     waiting_for_suggest[message.from_user.id] = False
@@ -345,6 +360,7 @@ def not_voted(message, args):
 
 
 @bot.message_handler(commands=['ban'])
+@sessioned_data(manager, 'banlist.json')
 @arg_parse
 @mod_feature
 @private_chat
@@ -381,11 +397,13 @@ def ban(message, args):
     banlist.update({user_id: int(time.time()) + period})
     utils.save_json(banlist, 'banlist.json')
 
-    bot.send_message(user_id, f'Ты был заблокирован по причине {reason}. Оставшееся время блокировки: {utils.format_time(period)}')
+    bot.send_message(user_id,
+                     f'Ты был заблокирован по причине {reason}. Оставшееся время блокировки: {utils.format_time(period)}')
     bot.send_message(message.chat.id, f'Пользователь {user_id} успешно заблокирован!')
 
 
 @bot.message_handler(commands=['unban'])
+@sessioned_data(manager, 'banlist.json')
 @arg_parse
 @mod_feature
 @private_chat
@@ -413,6 +431,7 @@ def unban(message, args):
 
 
 @bot.message_handler(commands=['push'])
+@sessioned_data(manager, 'queue.json')
 @arg_parse
 @admin_feature
 @private_chat
@@ -432,6 +451,7 @@ def push(_, args):
 
 
 @bot.message_handler(commands=['get'])
+@sessioned_data(manager, 'queue.json')
 @mod_feature
 @private_chat
 def get(message):
@@ -446,6 +466,7 @@ def get(message):
 
 
 @bot.message_handler(commands=['get_banlist'])
+@sessioned_data(manager, 'banlist.json')
 @mod_feature
 @private_chat
 def get_banlist(message):
@@ -462,6 +483,7 @@ def get_banlist(message):
 
 
 @bot.message_handler(commands=['delete'])
+@sessioned_data(manager, 'queue.json')
 @arg_parse
 @admin_feature
 @private_chat
@@ -484,6 +506,8 @@ def delete(_, args):
 
 
 @bot.message_handler(commands=['edit'])
+@sessioned_data(manager, 'queue.json')
+@sessioned_data(manager, 'pending.json')
 @arg_parse
 def edit(message, args):
     if message.chat.id == ADMIN_ID:
@@ -523,6 +547,7 @@ def edit(message, args):
 
 
 @bot.message_handler(commands=['swap'])
+@sessioned_data(manager, 'queue.json')
 @arg_parse
 @admin_feature
 @private_chat
@@ -545,6 +570,7 @@ def swap(_, args):
 
 
 @bot.message_handler(commands=['insert'])
+@sessioned_data(manager, 'queue.json')
 @arg_parse
 @admin_feature
 @private_chat
@@ -585,6 +611,8 @@ def text_handler(message):
 
 
 @bot.callback_query_handler(func=lambda call: True)
+@sessioned_data(manager, 'pending.json')
+@sessioned_data(manager, 'rejected.json')
 def button_handler(call):
     action = call.data.split(': ')
 
@@ -626,16 +654,18 @@ def button_handler(call):
 
         if moderator_id in reputation[opposite_vote[0]]:
             pending[quote_id]['reputation'][opposite_vote[0]].remove(call.from_user.id)
-            bot.answer_callback_query(call.id, f'Успешно поменял твой голос с "{opposite_vote[1]}" на "{current_vote[1]}"!')
+            bot.answer_callback_query(call.id,
+                                      f'Успешно поменял твой голос с "{opposite_vote[1]}" на "{current_vote[1]}"!')
 
         bot.answer_callback_query(call.id, f'Спасибо за голос "{current_vote[1]}"!')
 
         pending[quote_id]['reputation'][current_vote[0]].append(call.from_user.id)
 
     elif action[0] == 'suggest_reject' and call.from_user.id in ADMIN_LIST:
-        keyboard = generate_keyboard({'🤬 Цензура': f'reject: {quote_id}: censorship', '🤷 Что-то пошло не так': f'reject: {quote_id}: fail',
-                                      '📜 Дубликат': f'reject: {quote_id}: duplicate', '💬 Флуд': f'reject: {quote_id}: flood',
-                                      '👤 Отсутствие автора': f'reject: {quote_id}: unknown_author', '🚫 Отмена': f'reject: {quote_id}: cancel'})
+        keyboard = generate_keyboard(
+            {'🤬 Цензура': f'reject: {quote_id}: censorship', '🤷 Что-то пошло не так': f'reject: {quote_id}: fail',
+             '📜 Дубликат': f'reject: {quote_id}: duplicate', '💬 Флуд': f'reject: {quote_id}: flood',
+             '👤 Отсутствие автора': f'reject: {quote_id}: unknown_author', '🚫 Отмена': f'reject: {quote_id}: cancel'})
 
         bot.edit_message_text(call.message.text, VOTING_ID, call.message.id, reply_markup=keyboard)
 
@@ -663,10 +693,12 @@ def button_handler(call):
 
         rejected = utils.open_json('rejected.json')
 
-        bot.edit_message_text(f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username} по причине {reason}', VOTING_ID,
-                              call.message.id, reply_markup=None)
+        bot.edit_message_text(
+            f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username} по причине {reason}', VOTING_ID,
+            call.message.id, reply_markup=None)
         try:
-            bot.send_message(author_id, f'Твоя цитата была отклонена по причине {reason}', reply_to_message_id=source_id)
+            bot.send_message(author_id, f'Твоя цитата была отклонена по причине {reason}',
+                             reply_to_message_id=source_id)
         except telebot.apihelper.ApiTelegramException:
             bot.send_message(author_id, f'Твоя цитата была отклонена по причине {reason}')
 
