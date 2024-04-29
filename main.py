@@ -66,7 +66,6 @@ def check_publish(publish_date: str):
         publish_quote()
 
 
-@sessioned_data(manager, 'queue.json')
 def publish_quote():
     queue = utils.open_json('queue.json')
 
@@ -157,7 +156,6 @@ def handle_quote(message, quote):
     utils.save_json(pending, 'pending.json')
 
 
-@sessioned_data(manager, 'pending.json')
 def not_voted_stat(target: int):
     pending = utils.open_json('pending.json')
     result = ''
