@@ -37,8 +37,16 @@ class SessionManager:
 
 def sessioned_data(manager: SessionManager, source: str):
     def decorator(func):
+        func.__dict__['sessioned_sources'] = func.__dict__.get('sessioned_sources', []) + [source]
+
         @wraps(func)
         def wrapper(*args, **kwargs):
+            parent = locals()['func']
+
+            sessioned_sources = parent.__dict__.get('sessioned_sources')
+            if sessioned_sources is not None and source in sessioned_sources:
+                return func(*args, **kwargs)
+
             session = manager.init_session(source)
             result = func(*args, **kwargs)
             session.end()
