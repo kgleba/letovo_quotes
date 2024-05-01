@@ -751,7 +751,7 @@ if __name__ == '__main__':
             raw_update = request.stream.read().decode('utf-8')
             logger.debug(pformat(raw_update))
             bot.process_new_updates([telebot.types.Update.de_json(raw_update)])
-            return '!', 2001
+            return '!', 200
 
 
         @server.route('/launch')
