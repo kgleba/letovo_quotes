@@ -1,20 +1,41 @@
+import atexit
+import logging
+import logging.config
 import time
 from datetime import datetime, timedelta
 from functools import wraps
+from pprint import pformat
 from threading import Thread
 
 import schedule
 import telebot
+import yaml
 from flask import Flask, request
 
 import utils
-from data_sessions import SessionManager, sessioned_data
 from config import *
+from data_sessions import sessioned_data, SessionManager
 
 manager = SessionManager()
 
 bot = telebot.TeleBot(BOT_TOKEN)
 waiting_for_suggest = {}
+
+logger = logging.getLogger('letovo_quotes')
+
+
+def setup_logging():
+    with open('logging.yaml') as config_file:
+        config = yaml.load(config_file, Loader=yaml.SafeLoader)
+
+    logging.config.dictConfig(config)
+    queue_handler = logging.getHandlerByName('queue_handler')
+    if queue_handler is not None:
+        queue_handler.listener.start()
+        atexit.register(queue_handler.listener.stop)
+
+
+setup_logging()
 
 
 def mod_feature(func):
@@ -254,7 +275,7 @@ def start(message):
     bot.send_message(message.chat.id,
                      'Привет! Сюда ты можешь предлагать цитаты для публикации в канале "Забавные цитаты Летово". Если ты вдруг еще не подписан - держи ссылку: '
                      'https://t.me/letovo_quotes. Никаких ограничений - предлагай все, что покажется тебе смешным (с помощью команды /suggest), главное, укажи автора цитаты :)')
-    print(message.from_user.id)
+    logging.info(f'{message.from_user.id = }')
 
 
 @bot.message_handler(commands=['suggest'])
@@ -726,8 +747,10 @@ if __name__ == '__main__':
 
         @server.route('/updates', methods=['POST'])
         def get_messages():
-            bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode('utf-8'))])
-            return '!', 200
+            raw_update = request.stream.read().decode('utf-8')
+            logger.debug(pformat(raw_update))
+            bot.process_new_updates([telebot.types.Update.de_json(raw_update)])
+            return '!', 2001
 
 
         @server.route('/launch')
@@ -744,11 +767,11 @@ if __name__ == '__main__':
         bot.remove_webhook()
         Thread(target=bot.infinity_polling, kwargs={'timeout': 60, 'long_polling_timeout': 60}).start()
 
-for date in POST_TIME:
-    schedule.every().day.at(date).do(check_publish, publish_date=date)
+    for date in POST_TIME:
+        schedule.every().day.at(date).do(check_publish, publish_date=date)
 
-schedule.every().day.at(VERDICT_TIME).do(quote_verdict)
+    schedule.every().day.at(VERDICT_TIME).do(quote_verdict)
 
-while True:
-    schedule.run_pending()
-    time.sleep(1)
+    while True:
+        schedule.run_pending()
+        time.sleep(1)

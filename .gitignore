@@ -16,5 +16,5 @@ rejected.json
 # Config file
 config.py
 
-# Telethon
-telethon/*
+# Logs
+logs/*
