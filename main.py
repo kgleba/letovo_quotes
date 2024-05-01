@@ -22,6 +22,7 @@ bot = telebot.TeleBot(BOT_TOKEN)
 waiting_for_suggest = {}
 
 logger = logging.getLogger('letovo_quotes')
+os.makedirs('logs', exist_ok=True)
 
 
 def setup_logging():
