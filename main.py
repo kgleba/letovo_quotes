@@ -738,7 +738,7 @@ def button_handler(call):
 
 if __name__ == '__main__':
     if SERVER:
-        server = Flask('__main__')
+        server = Flask(__name__)
 
 
         @server.route('/')

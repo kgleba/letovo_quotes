@@ -6,6 +6,8 @@ formatters:
   detailed:
     format: '[%(levelname)s|%(module)s|L%(lineno)d] %(asctime)s: %(message)s'
     datefmt: '%d.%m.%Y %H:%M:%S'
+  concise:
+    format: '[%(levelname)s|%(module)s|L%(lineno)d] %(message)s'
 handlers:
   stderr:
     class: logging.StreamHandler
@@ -22,7 +24,7 @@ handlers:
   remote:
     class: logging.handlers.SysLogHandler
     level: INFO
-    formatter: detailed
+    formatter: concise
     address: ["logs6.papertrailapp.com", 29890]
   queue_handler:
     class: logging.handlers.QueueHandler
