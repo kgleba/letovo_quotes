@@ -19,11 +19,17 @@ handlers:
     filename: logs/letovo_quotes.log
     maxBytes: 10_000_000
     backupCount: 3
+  remote:
+    class: logging.handlers.SysLogHandler
+    level: INFO
+    formatter: detailed
+    address: ["logs6.papertrailapp.com", 29890]
   queue_handler:
     class: logging.handlers.QueueHandler
     handlers:
       - stderr
       - file
+      - remote
     respect_handler_level: true
 loggers:
   root:
