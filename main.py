@@ -4,6 +4,7 @@ import logging.config
 import time
 from datetime import datetime, timedelta
 from functools import wraps
+from operator import itemgetter
 from pprint import pformat
 from threading import Thread
 
@@ -132,7 +133,7 @@ def handle_quote(message, quote):
             case 'Text is too long':
                 bot.send_message(message.chat.id, 'Отправленная цитата слишком большая!')
             case _:
-                print(e)
+                logger.error(e)
         return
 
     if author_name is None:
@@ -145,6 +146,7 @@ def handle_quote(message, quote):
             banlist.pop(author_id)
             utils.save_json(banlist, 'banlist.json')
         else:
+            logger.info(f'Received message from the banned user ({author_name}): "{quote}"')
             bot.send_message(message.chat.id,
                              f'Ты был заблокирован, поэтому не можешь предлагать цитаты. Оставшееся время блокировки: {utils.format_time(banlist[author_id] - int(time.time()))}')
             return
@@ -359,7 +361,21 @@ def reload(_):
 @private_chat
 def not_voted(message, args):
     user_id = message.from_user.id
-    target = args[0]
+    target = args[0].strip()
+
+    if target == 'all' and user_id in ADMIN_LIST:
+        voted_stat = {}
+        for mod_id, mod_nick in MOD_LIST.items():
+            voted_stat[mod_nick] = len(not_voted_stat(mod_id).splitlines())
+
+        voted_stat = dict(sorted(voted_stat.items(), key=itemgetter(1), reverse=True))
+
+        result = '<b>Непроголосованные цитаты</b>\n\n'
+        for mod_nick, not_voted_quotes in voted_stat.items():
+            result += f'<code>{mod_nick}</code>: {not_voted_quotes}\n'
+
+        bot.send_message(message.chat.id, result, parse_mode='HTML')
+        return
 
     if target:
         if not target.isdigit() or int(target) not in MOD_LIST:
