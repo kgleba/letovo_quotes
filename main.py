@@ -1,6 +1,7 @@
 import atexit
 import logging
 import logging.config
+import re
 import time
 from datetime import datetime, timedelta
 from functools import wraps
@@ -642,8 +643,13 @@ def text_handler(message):
         waiting_for_suggest[author_id] = False
 
     if message.chat.id == DISCUSSION_ID and message.from_user.username == 'Channel_Bot' and message.sender_chat.title != CHANNEL_NAME:
-        bot.delete_message(message.chat.id, message.message_id)
-        bot.kick_chat_member(message.chat.id, message.from_user.id)
+        bot.delete_message(DISCUSSION_ID, message.message_id)
+        bot.kick_chat_member(DISCUSSION_ID, message.from_user.id)
+
+    if message.chat.id == DISCUSSION_ID and re.search('@[a-zA-Z0-9_]{5,32}$', message.text.strip()) is not None:
+        bot.delete_message(DISCUSSION_ID, message.message_id)
+        bot.send_message(ADMIN_ID,
+                         f'Пользователь @{message.from_user.username} отправил в чат обсуждения сообщение с пингом! Мы подозреваем, что это спам =(')
 
 
 @bot.callback_query_handler(func=lambda call: True)
