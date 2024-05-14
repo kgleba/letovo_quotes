@@ -255,7 +255,7 @@ def quote_verdict():
 
             accept_quo += 1
 
-            logging.info(f'{accept_quo = }, {pformat(queue[-1])}')
+            logging.info(f'{accept_quo = }, {pformat(queue[-1]) if queue else None}')
 
     utils.save_json(updated_pending, 'pending.json')
 
