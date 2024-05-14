@@ -1,4 +1,5 @@
 import atexit
+import json
 import logging
 import logging.config
 import re
@@ -119,7 +120,7 @@ def generate_keyboard(content: dict[str, str]):
 @sessioned_data(manager, 'pending.json')
 def handle_quote(message, quote):
     author = message.from_user
-    author_name = author.username
+    author_representation = utils.user_representation(author)
     author_id = str(author.id)
 
     try:
@@ -137,9 +138,6 @@ def handle_quote(message, quote):
                 logger.error(e)
         return
 
-    if author_name is None:
-        author_name = author.first_name + ' ' + author.last_name
-
     banlist = utils.open_json('banlist.json')
 
     if author_id in banlist:
@@ -147,7 +145,7 @@ def handle_quote(message, quote):
             banlist.pop(author_id)
             utils.save_json(banlist, 'banlist.json')
         else:
-            logger.info(f'Received message from the banned user ({author_name}): "{quote}"')
+            logger.info(f'Received message from the banned user {author_representation}: "{quote}"')
             bot.send_message(message.chat.id,
                              f'Ты был заблокирован, поэтому не можешь предлагать цитаты. Оставшееся время блокировки: {utils.format_time(banlist[author_id] - int(time.time()))}')
             return
@@ -171,27 +169,27 @@ def handle_quote(message, quote):
                                   '🚫 Отклонить (только администраторы)': f'suggest_reject: {call_count}'})
 
     sent_quote = bot.send_message(VOTING_ID,
-                                  f'Пользователь @{author_name} [ID: {author_id}] предложил следующую цитату:\n\n{quote}',
+                                  f'Пользователь {author_representation} предложил следующую цитату:\n\n{quote}',
                                   reply_markup=keyboard)
 
     pending.update(
-        {call_count: {'text': quote, 'message_id': sent_quote.message_id, 'author': [author_id, author_name],
+        {call_count: {'text': quote, 'message_id': sent_quote.message_id, 'author': author_representation,
                       'source': [message.chat.id, message.id], 'reputation': {'+': [], '-': []}}})
 
     utils.save_json(pending, 'pending.json')
 
 
-def not_voted_stat(target: int):
+def not_voted_stat(target: int) -> (int, str):
     pending = utils.open_json('pending.json')
     result = ''
     quotes_count = 1
 
     for quote in pending.values():
         if target not in quote['reputation']['+'] + quote['reputation']['-']:
-            result += f'{quotes_count}. https://t.me/c/{str(VOTING_ID)[3:]}/{quote["message_id"]}\n'
+            result += f'{quotes_count}. https://t.me/c/{str(VOTING_ID)[3:]}/{quote['message_id']}\n'
             quotes_count += 1
 
-    return result.strip()
+    return quotes_count - 1, result.strip()
 
 
 @sessioned_data(manager, 'pending.json')
@@ -202,7 +200,10 @@ def quote_verdict():
 
     voted_stat = {}
     for mod_id, mod_nick in MOD_LIST.items():
-        voted_stat[mod_nick] = [len(not_voted_stat(mod_id).splitlines())]
+        not_voted_count, _ = not_voted_stat(mod_id)
+        voted_stat[mod_nick] = [not_voted_count]
+
+    logging.debug(pformat(voted_stat))
 
     accept_quo, reject_quo = 0, 0
 
@@ -218,7 +219,7 @@ def quote_verdict():
             updated_pending.update({key: quote})
         elif reputation < ACCEPT:
             bot.edit_message_text(
-                f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
+                f'Пользователь {quote['author']} '
                 f'предложил следующую цитату:\n\n{quote_text}\n\nОтклонено модерацией с рейтингом {reputation}',
                 VOTING_ID, message_id, reply_markup=None)
             try:
@@ -235,9 +236,11 @@ def quote_verdict():
             utils.save_json(rejected, 'rejected.json')
 
             reject_quo += 1
+
+            logging.info(f'{reject_quo = }, {pformat(rejected[-1])}')
         else:
             bot.edit_message_text(
-                f'Пользователь @{quote["author"][1]} [ID: {quote["author"][0]}] '
+                f'Пользователь {quote['author']} '
                 f'предложил следующую цитату:\n\n{quote_text}\n\nОпубликовано модерацией с рейтингом {reputation}',
                 VOTING_ID, message_id, reply_markup=None)
             try:
@@ -252,14 +255,18 @@ def quote_verdict():
 
             accept_quo += 1
 
+            logging.info(f'{accept_quo = }, {pformat(queue[-1])}')
+
     utils.save_json(updated_pending, 'pending.json')
 
     for mod_id, mod_nick in MOD_LIST.items():
-        not_voted_mod_stat = not_voted_stat(mod_id)
-        voted_stat[mod_nick] += [len(not_voted_mod_stat.splitlines())]
+        not_voted_count, not_voted_mod_stat = not_voted_stat(mod_id)
+        voted_stat[mod_nick].append(not_voted_count)
 
         if not_voted_mod_stat:
             bot.send_message(mod_id, 'Ты не проголосовал за следующие цитаты:\n' + not_voted_mod_stat)
+
+    logging.debug(pformat(voted_stat))
 
     voted_stat_msg = '<b>Непроголосованные цитаты</b>\nМодератор: всего (осталось)\n\n'
     for mod, stat in voted_stat.items():
@@ -279,7 +286,7 @@ def start(message):
     bot.send_message(message.chat.id,
                      'Привет! Сюда ты можешь предлагать цитаты для публикации в канале "Забавные цитаты Летово". Если ты вдруг еще не подписан - держи ссылку: '
                      'https://t.me/letovo_quotes. Никаких ограничений - предлагай все, что покажется тебе смешным (с помощью команды /suggest), главное, укажи автора цитаты :)')
-    logging.info(f'{message.from_user.id = }')
+    logging.info(f'{utils.user_representation(message.from_user) = }')
 
 
 @bot.message_handler(commands=['suggest'])
@@ -327,13 +334,14 @@ def suggest_rollback(message):
     pending = utils.open_json('pending.json')
 
     for counter, sent_quote in reversed(pending.items()):
-        if sent_quote['author'][0] == str(message.from_user.id):
+        sent_quote_author_id = int(re.search(r'ID: (\d+)', sent_quote['author']).group(1))
+        if sent_quote_author_id == message.from_user.id:
             pending.pop(str(counter))
             quote_text = sent_quote['text']
             quote_id = sent_quote['message_id']
 
             bot.edit_message_text(
-                f'Пользователь @{sent_quote["author"][1]} [ID: {sent_quote["author"][0]}] '
+                f'Пользователь {sent_quote['author']} '
                 f'предложил следующую цитату:\n\n{quote_text}\n\nПредложенная цитата была отклонена автором.',
                 VOTING_ID, quote_id, reply_markup=None)
             bot.send_message(message.chat.id, 'Успешно отозвал твою последнюю предложенную цитату!')
@@ -367,7 +375,8 @@ def not_voted(message, args):
     if target == 'all' and user_id in ADMIN_LIST:
         voted_stat = {}
         for mod_id, mod_nick in MOD_LIST.items():
-            voted_stat[mod_nick] = len(not_voted_stat(mod_id).splitlines())
+            not_voted_count, _ = not_voted_stat(mod_id)
+            voted_stat[mod_nick] = not_voted_count
 
         voted_stat = dict(sorted(voted_stat.items(), key=itemgetter(1), reverse=True))
 
@@ -388,7 +397,7 @@ def not_voted(message, args):
             bot.send_message(message.chat.id, 'У тебя нет доступа к этой функции.')
             return
 
-    result = not_voted_stat(user_id)
+    _, result = not_voted_stat(user_id)
 
     if result:
         bot.send_message(message.chat.id, 'Ты не проголосовал за следующие цитаты:\n' + result)
@@ -771,7 +780,7 @@ if __name__ == '__main__':
         @server.route('/updates', methods=['POST'])
         def get_messages():
             raw_update = request.stream.read().decode('utf-8')
-            logger.debug(pformat(raw_update))
+            logger.debug(pformat(json.loads(raw_update)))
             bot.process_new_updates([telebot.types.Update.de_json(raw_update)])
             return '!', 200
 

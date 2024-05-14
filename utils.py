@@ -14,7 +14,7 @@ gl = gitlab.Gitlab('https://gitlab.com', private_token=G_TOKEN)
 project = gl.projects.get(G_PROJECT)
 
 
-def push_gitlab(filename: str):
+def push_gitlab(filename: str) -> None:
     with open(filename, 'r', encoding='utf-8') as file:
         data = file.read()
 
@@ -38,7 +38,7 @@ def push_gitlab(filename: str):
     project.commits.create(payload)
 
 
-def load_file(filename: str):
+def load_file(filename: str) -> None:
     with open(filename, 'wb') as file:
         try:
             project.files.raw(file_path=filename, ref='main', streamed=True, action=file.write)
@@ -46,7 +46,7 @@ def load_file(filename: str):
             file.write(b'')
 
 
-def reload_files():
+def reload_files() -> None:
     for filename in FILES:
         load_file(filename)
 
@@ -60,14 +60,14 @@ def open_json(filename: str) -> dict:
     return data
 
 
-def save_json(data, filename: str):
+def save_json(data, filename: str) -> None:
     with open(filename, 'w', encoding='utf-8') as file:
         json.dump(data, file, ensure_ascii=False)
 
     push_gitlab(filename)
 
 
-def reformat_quote(text: str):
+def reformat_quote(text: str) -> str:
     from config import MAX_QUOTE_LEN, REJECTED_AUTHORS
 
     if '#' not in text:
@@ -103,12 +103,21 @@ def reformat_quote(text: str):
     return text
 
 
-def check_similarity(text_1: str, text_2: str):
+def check_similarity(text_1: str, text_2: str) -> float:
     return difflib.SequenceMatcher(lambda symbol: symbol in (' ', '\n', '\t'), text_1, text_2).ratio() * 100
 
 
-def format_time(raw: int):
+def format_time(raw: int) -> str:
     return str(datetime.timedelta(seconds=raw))
+
+
+def user_representation(user) -> str:
+    if user.username is None:
+        username = ' '.join((user.first_name, user.last_name))
+    else:
+        username = f'@{user.username}'
+
+    return f'{username} [ID: {user.id}]'
 
 
 reload_files()
