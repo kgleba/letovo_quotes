@@ -218,10 +218,13 @@ def quote_verdict():
         if len(quote['reputation']['+']) + len(quote['reputation']['-']) < MIN_VOTES:
             updated_pending.update({key: quote})
         elif reputation < ACCEPT:
-            bot.edit_message_text(
-                f'Пользователь {quote['author']} '
-                f'предложил следующую цитату:\n\n{quote_text}\n\nОтклонено модерацией с рейтингом {reputation}',
-                VOTING_ID, message_id, reply_markup=None)
+            try:
+                bot.edit_message_text(
+                    f'Пользователь {quote['author']} '
+                    f'предложил следующую цитату:\n\n{quote_text}\n\nОтклонено модерацией с рейтингом {reputation}',
+                    VOTING_ID, message_id, reply_markup=None)
+            except telebot.apihelper.ApiTelegramException:
+                logger.exception(f'Error with editing message {message_id} in voting chat')
             try:
                 bot.send_message(author_id, 'Твоя цитата была отклонена на голосовании :(',
                                  reply_to_message_id=source_id)
@@ -237,12 +240,15 @@ def quote_verdict():
 
             reject_quo += 1
 
-            logger.info(f'{reject_quo = }, {pformat(rejected[-1])}')
+            logger.info(f'{reject_quo = }, {pformat(rejected[str(max(map(int, rejected)))]) if rejected else None}')
         else:
-            bot.edit_message_text(
-                f'Пользователь {quote['author']} '
-                f'предложил следующую цитату:\n\n{quote_text}\n\nОпубликовано модерацией с рейтингом {reputation}',
-                VOTING_ID, message_id, reply_markup=None)
+            try:
+                bot.edit_message_text(
+                    f'Пользователь {quote['author']} '
+                    f'предложил следующую цитату:\n\n{quote_text}\n\nОпубликовано модерацией с рейтингом {reputation}',
+                    VOTING_ID, message_id, reply_markup=None)
+            except telebot.apihelper.ApiTelegramException:
+                logger.exception(f'Error with editing message {message_id} in voting chat')
             try:
                 bot.send_message(author_id, 'Твоя цитата отправлена в очередь на публикацию!',
                                  reply_to_message_id=source_id)
@@ -255,7 +261,7 @@ def quote_verdict():
 
             accept_quo += 1
 
-            logger.info(f'{accept_quo = }, {pformat(queue[-1]) if queue else None}')
+            logger.info(f'{accept_quo = }, {pformat(queue[str(max(map(int, queue)))]) if queue else None}')
 
     utils.save_json(updated_pending, 'pending.json')
 
@@ -340,10 +346,13 @@ def suggest_rollback(message):
             quote_text = sent_quote['text']
             quote_id = sent_quote['message_id']
 
-            bot.edit_message_text(
-                f'Пользователь {sent_quote['author']} '
-                f'предложил следующую цитату:\n\n{quote_text}\n\nПредложенная цитата была отклонена автором.',
-                VOTING_ID, quote_id, reply_markup=None)
+            try:
+                bot.edit_message_text(
+                    f'Пользователь {sent_quote['author']} '
+                    f'предложил следующую цитату:\n\n{quote_text}\n\nПредложенная цитата была отклонена автором.',
+                    VOTING_ID, quote_id, reply_markup=None)
+            except telebot.apihelper.ApiTelegramException:
+                logger.exception(f'Error with editing rolled back quote {quote_id}')
             bot.send_message(message.chat.id, 'Успешно отозвал твою последнюю предложенную цитату!')
 
             utils.save_json(pending, 'pending.json')
@@ -744,9 +753,12 @@ def button_handler(call):
 
         rejected = utils.open_json('rejected.json')
 
-        bot.edit_message_text(
-            f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username} по причине {reason}', VOTING_ID,
-            call.message.id, reply_markup=None)
+        try:
+            bot.edit_message_text(
+                f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username} по причине {reason}', VOTING_ID,
+                call.message.id, reply_markup=None)
+        except telebot.apihelper.ApiTelegramException:
+            logger.exception(f'Error with editing message {call.message.id} by admin command')
         try:
             bot.send_message(author_id, f'Твоя цитата была отклонена по причине {reason}',
                              reply_to_message_id=source_id)
