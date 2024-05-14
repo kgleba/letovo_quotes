@@ -203,7 +203,7 @@ def quote_verdict():
         not_voted_count, _ = not_voted_stat(mod_id)
         voted_stat[mod_nick] = [not_voted_count]
 
-    logging.debug(pformat(voted_stat))
+    logger.debug(pformat(voted_stat))
 
     accept_quo, reject_quo = 0, 0
 
@@ -237,7 +237,7 @@ def quote_verdict():
 
             reject_quo += 1
 
-            logging.info(f'{reject_quo = }, {pformat(rejected[-1])}')
+            logger.info(f'{reject_quo = }, {pformat(rejected[-1])}')
         else:
             bot.edit_message_text(
                 f'Пользователь {quote['author']} '
@@ -255,7 +255,7 @@ def quote_verdict():
 
             accept_quo += 1
 
-            logging.info(f'{accept_quo = }, {pformat(queue[-1]) if queue else None}')
+            logger.info(f'{accept_quo = }, {pformat(queue[-1]) if queue else None}')
 
     utils.save_json(updated_pending, 'pending.json')
 
@@ -266,7 +266,7 @@ def quote_verdict():
         if not_voted_mod_stat:
             bot.send_message(mod_id, 'Ты не проголосовал за следующие цитаты:\n' + not_voted_mod_stat)
 
-    logging.debug(pformat(voted_stat))
+    logger.debug(pformat(voted_stat))
 
     voted_stat_msg = '<b>Непроголосованные цитаты</b>\nМодератор: всего (осталось)\n\n'
     for mod, stat in voted_stat.items():
