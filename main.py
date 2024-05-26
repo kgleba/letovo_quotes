@@ -664,7 +664,7 @@ def text_handler(message):
         bot.delete_message(DISCUSSION_ID, message.message_id)
         bot.kick_chat_member(DISCUSSION_ID, message.from_user.id)
 
-    if message.chat.id == DISCUSSION_ID and re.search('@[a-zA-Z0-9_]{5,32}$', message.text.strip()) is not None:
+    if message.chat.id == DISCUSSION_ID and re.search(r'(@|t.me/)[a-zA-Z0-9_]{5,32}$', message.text.strip()) is not None:
         bot.delete_message(DISCUSSION_ID, message.message_id)
         bot.send_message(ADMIN_ID,
                          f'Пользователь @{message.from_user.username} отправил в чат обсуждения сообщение с пингом! Мы подозреваем, что это спам =(')
