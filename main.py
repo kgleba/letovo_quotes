@@ -373,6 +373,27 @@ def reload(_):
     utils.reload_files()
 
 
+@bot.message_handler(commands=['predict_verdict'])
+@admin_feature
+@private_chat
+@sessioned_data(manager, 'pending.json')
+def predict_verdict(_):
+    pending = utils.open_json('pending.json')
+    prediction_msg = '<b>Предсказание вердикта</b>\nN. Цитата (кол-во голосов / общее число голосов) — ВЕРДИКТ (репутация)\n\n'
+
+    for index, (key, quote) in enumerate(pending.items()):
+        reputation = len(quote['reputation']['+']) - len(quote['reputation']['-'])
+        votes = len(quote['reputation']['+']) + len(quote['reputation']['-'])
+
+        predicted_verdict = 'REJECT' if reputation < ACCEPT else 'ACCEPT'
+        if votes < MIN_VOTES:
+            predicted_verdict = 'INSUFFICIENT VOTES'
+
+        prediction_msg += f'{index + 1}. https://t.me/c/{str(VOTING_ID)[3:]}/{quote['message_id']} ({votes} / {len(MOD_LIST)}) — {predicted_verdict} ({reputation})\n'
+
+    bot.send_message(ADMIN_ID, prediction_msg, parse_mode='HTML')
+
+
 @bot.message_handler(commands=['not_voted'])
 @arg_parse
 @mod_feature
