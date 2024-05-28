@@ -14,7 +14,7 @@
 5. `/not_voted` – get links to all quotes in pending, for which you haven't voted yet
 #### For admins:
 1. `/push` – add a quote to the queue
-2. `/edit` – edit a quote with a given id
+2. `/edit` – edit a quote with a given id, or edit a pending quote
 3. `/delete` – delete a quote with a given id from the queue
 4. `/swap` – swap two quotes in the queue
 5. `/insert` – insert a quote into the queue

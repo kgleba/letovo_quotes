@@ -32,3 +32,6 @@ MAX_QUOTE_LEN: int = 500
 REJECTED_AUTHORS: list[str] = []  # should not appear in the hashtag
 
 DATA_FILES: list[str] = list(map(lambda e: e.name, Path('.').glob('*.json')))
+
+log_host, log_port = os.getenv('LOG_ENDPOINT', '127.0.0.1:8080').split(':')
+LOG_ADDRESS = [log_host, int(log_port)]
