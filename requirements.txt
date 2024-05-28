@@ -1,5 +1,5 @@
 schedule~=1.2.1
-pytelegrambotapi~=4.17.0
+pytelegrambotapi~=4.18.1
 python-gitlab~=4.5.0
 Flask~=3.0.3
 PyYAML~=6.0.1
