@@ -322,7 +322,8 @@ def help(message):
     admin_help = '/push [text] – добавление цитаты в очередь\n' \
                  '/edit [id]; [text] – изменение цитаты с заданным номером\n/delete [id] – удаление цитаты с заданным номером\n' \
                  '/swap [id1]; [id2] – поменять местами две цитаты\n/insert [id]; [text] – вставить цитату в заданное место в очереди\n' \
-                 '/verdict – вызвать определение вердиктов для всех цитат в предложке\n/reload – перезагрузить файлы из облака'
+                 '/verdict – вызвать определение вердиктов для всех цитат в предложке\n/predict – получить предсказание вердикта\n' \
+                 '/reload – перезагрузить файлы из облака'
 
     bot.send_message(message.chat.id, user_help, parse_mode='HTML')
 
@@ -373,11 +374,11 @@ def reload(_):
     utils.reload_files()
 
 
-@bot.message_handler(commands=['predict_verdict'])
+@bot.message_handler(commands=['predict'])
 @admin_feature
 @private_chat
 @sessioned_data(manager, 'pending.json')
-def predict_verdict(_):
+def predict(_):
     pending = utils.open_json('pending.json')
     prediction_msg = '<b>Предсказание вердикта</b>\nN. Цитата (кол-во голосов / общее число голосов) — ВЕРДИКТ (репутация)\n\n'
 

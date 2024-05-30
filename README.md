@@ -11,15 +11,16 @@
 2. `/unban` – enable `/suggest` command for a user if it was disabled before
 3. `/get_banlist` – get all banned users
 4. `/get` – get all quotes in the queue
-5. `/not_voted` – get links to all quotes in pending, for which you haven't voted yet
+5. `/not_voted` – get links to all pending quotes, for which you haven't voted yet
 #### For admins:
 1. `/push` – add a quote to the queue
 2. `/edit` – edit a quote with a given id, or edit a pending quote
 3. `/delete` – delete a quote with a given id from the queue
 4. `/swap` – swap two quotes in the queue
 5. `/insert` – insert a quote into the queue
-6. `/verdict` – get verdicts for all quotes in the queue
-7. `/reload` – reload files from cloud storage
+6. `/verdict` – get verdicts for all pending quotes
+7. `/predict` – predict verdicts for all pending quotes
+8. `/reload` – reload files from cloud storage
 
 All data is stored in a GitLab repository.
 Quotes are posted automatically at a set time.
