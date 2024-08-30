@@ -80,7 +80,7 @@ def private_chat(func):
 def arg_parse(func):
     @wraps(func)
     def wrapper(message, *args, **kwargs):
-        params = message.text.removeprefix(f'/{func.__name__} ').split('; ')
+        params = message.text.removeprefix(f'/{func.__name__}').strip().split('; ')
         return func(message, params, *args, **kwargs)
 
     return wrapper
