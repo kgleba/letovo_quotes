@@ -77,7 +77,7 @@ def private_chat(func):
 def arg_parse(func):
     @wraps(func)
     def wrapper(message, *args, **kwargs):
-        params = message.text[len(func.__name__) + 2:].split('; ')
+        params = message.text.removeprefix(f'/{func.__name__} ').split('; ')
         return func(message, params, *args, **kwargs)
 
     return wrapper
@@ -195,8 +195,10 @@ def not_voted_stat(target: int) -> (int, str):
 @sessioned_data(manager, 'pending.json')
 @sessioned_data(manager, 'rejected.json')
 @sessioned_data(manager, 'queue.json')
+@sessioned_data(manager, 'sugg_stats.json')
 def quote_verdict():
     pending = utils.open_json('pending.json')
+    sugg_stats = utils.open_json('sugg_stats.json')
 
     voted_stat = {}
     for mod_id, mod_nick in MOD_LIST.items():
@@ -214,6 +216,11 @@ def quote_verdict():
         message_id = quote['message_id']
         author_id, source_id = quote['source']
         reputation = len(quote['reputation']['+']) - len(quote['reputation']['-'])
+        speakers = [speaker.removeprefix('#').lower() for speaker in quote_text.split('\n\n')[-1].split()]
+
+        for speaker in speakers:
+            sugg_stats['speaker'][speaker][1] = sugg_stats['speaker'].get(speaker, [0, 0])[1] + 1
+        sugg_stats['suggester'][author_id][1] = sugg_stats['suggester'].get(author_id, [0, 0])[1] + 1
 
         if len(quote['reputation']['+']) + len(quote['reputation']['-']) < MIN_VOTES:
             updated_pending.update({key: quote})
@@ -259,11 +266,16 @@ def quote_verdict():
             queue.update({str(len(queue)): quote_text})
             utils.save_json(queue, 'queue.json')
 
+            for speaker in speakers:
+                sugg_stats['speaker'][speaker][0] = sugg_stats['speaker'].get(speaker, [0, 0])[0] + 1
+            sugg_stats['suggester'][author_id][0] = sugg_stats['suggester'].get(author_id, [0, 0])[0] + 1
+
             accept_quo += 1
 
             logger.info(f'{accept_quo = }, {pformat(queue[str(max(map(int, queue)))]) if queue else None}')
 
     utils.save_json(updated_pending, 'pending.json')
+    utils.save_json(sugg_stats, 'sugg_stats.json')
 
     for mod_id, mod_nick in MOD_LIST.items():
         not_voted_count, not_voted_mod_stat = not_voted_stat(mod_id)
@@ -695,6 +707,7 @@ def text_handler(message):
 @bot.callback_query_handler(func=lambda call: True)
 @sessioned_data(manager, 'pending.json')
 @sessioned_data(manager, 'rejected.json')
+@sessioned_data(manager, 'sugg_stats.json')
 def button_handler(call):
     action = call.data.split(': ')
 
@@ -716,10 +729,11 @@ def button_handler(call):
         bot.reply_to(call.message, 'Возникла проблема с обработкой цитаты :( Если это необходимо, проведи ее вручную.')
         return
 
-    author_id = pending[quote_id]['source'][0]
-    source_id = pending[quote_id]['source'][1]
+    quote = pending[quote_id]
+    author_id = quote['source'][0]
+    source_id = quote['source'][1]
     moderator_id = call.from_user.id
-    reputation = pending[quote_id]['reputation']
+    reputation = quote['reputation']
 
     match action[0]:
         case 'upvote':
@@ -793,6 +807,17 @@ def button_handler(call):
             rejected.update({'0': call.message.text})
 
         utils.save_json(rejected, 'rejected.json')
+
+        sugg_stats = utils.open_json('sugg_stats.json')
+        quote_text = quote['text']
+
+        speakers = [speaker.removeprefix('#').lower() for speaker in quote_text.split('\n\n')[-1].split()]
+
+        for speaker in speakers:
+            sugg_stats['speaker'][speaker][1] = sugg_stats['speaker'].get(speaker, [0, 0])[1] + 1
+        sugg_stats['suggester'][author_id][1] = sugg_stats['suggester'].get(author_id, [0, 0])[1] + 1
+
+        utils.save_json(sugg_stats, 'sugg_stats.json')
 
         pending.pop(quote_id)
 

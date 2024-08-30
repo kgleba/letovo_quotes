@@ -8,7 +8,7 @@ import gitlab
 
 G_PROJECT = 35046550
 G_TOKEN = os.getenv('GITLAB_PAT')
-FILES = ['queue.json', 'banlist.json', 'pending.json', 'rejected.json', 'config.py']
+FILES = ['queue.json', 'banlist.json', 'pending.json', 'rejected.json', 'sugg_stats.json', 'config.py']
 
 gl = gitlab.Gitlab('https://gitlab.com', private_token=G_TOKEN)
 project = gl.projects.get(G_PROJECT)

@@ -13,6 +13,7 @@ queue.json
 banlist.json
 pending.json
 rejected.json
+sugg_stats.json
 
 # Config file
 config.py
