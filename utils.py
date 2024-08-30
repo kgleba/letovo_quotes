@@ -32,7 +32,7 @@ def push_gitlab(filename: str) -> None:
                 'file_path': filename,
                 'content': data,
             }
-        ]
+        ],
     }
 
     project.commits.create(payload)
@@ -96,7 +96,7 @@ def reformat_quote(text: str) -> str:
             raise ValueError('Author is rejected')
 
         tag += f'#{author} '
-        text = text[:start - 1].rstrip() + text[end:]
+        text = text[: start - 1].rstrip() + text[end:]
 
     text += f'\n\n{tag}'
 

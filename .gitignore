@@ -5,8 +5,9 @@
 __pycache__/*
 venv/*
 
-# Pylint
+# Lint
 .pylintrc
+ruff.toml
 
 # Local copies of JSON files
 queue.json

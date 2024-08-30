@@ -10,6 +10,7 @@ from operator import itemgetter
 from pprint import pformat
 from threading import Thread
 
+import requests
 import schedule
 import telebot
 import yaml
@@ -26,6 +27,8 @@ waiting_for_suggest = {}
 
 logger = logging.getLogger('letovo_quotes')
 os.makedirs('logs', exist_ok=True)
+
+session = requests.Session()
 
 
 def setup_logging():
@@ -128,8 +131,7 @@ def handle_quote(message, quote):
     except ValueError as e:
         match str(e):
             case 'Author is rejected':
-                bot.send_message(message.chat.id,
-                                 'К сожалению, автор попросил нас не выкладывать его цитаты в канал :(')
+                bot.send_message(message.chat.id, 'К сожалению, автор попросил нас не выкладывать его цитаты в канал :(')
             case 'Hashtag is not in text':
                 bot.send_message(message.chat.id, 'Цитата должна содержать хештег!')
             case 'Text is too long':
@@ -146,16 +148,17 @@ def handle_quote(message, quote):
             utils.save_json(banlist, 'banlist.json')
         else:
             logger.info(f'Received message from the banned user {author_representation}: "{quote}"')
-            bot.send_message(message.chat.id,
-                             f'Ты был заблокирован, поэтому не можешь предлагать цитаты. Оставшееся время блокировки: {utils.format_time(banlist[author_id] - int(time.time()))}')
+            bot.send_message(
+                message.chat.id,
+                f'Ты был заблокирован, поэтому не можешь предлагать цитаты. Оставшееся время блокировки: {utils.format_time(banlist[author_id] - int(time.time()))}',
+            )
             return
 
     pending = utils.open_json('pending.json')
 
     for sent_quote in pending.values():
         if utils.check_similarity(sent_quote['text'], quote) > 75:
-            bot.send_message(message.chat.id,
-                             'Подобная цитата уже отправлена в предложку! Флудить не стоит, ожидай ответа модерации :)')
+            bot.send_message(message.chat.id, 'Подобная цитата уже отправлена в предложку! Флудить не стоит, ожидай ответа модерации :)')
             return
 
     bot.send_message(message.chat.id, 'Принято! Отправил твою цитату в предложку :)')
@@ -165,16 +168,29 @@ def handle_quote(message, quote):
     else:
         call_count = 0
 
-    keyboard = generate_keyboard({'➕ За': f'upvote: {call_count}', '➖ Против': f'downvote: {call_count}',
-                                  '🚫 Отклонить (только администраторы)': f'suggest_reject: {call_count}'})
+    keyboard = generate_keyboard(
+        {
+            '➕ За': f'upvote: {call_count}',
+            '➖ Против': f'downvote: {call_count}',
+            '🚫 Отклонить (только администраторы)': f'suggest_reject: {call_count}',
+        }
+    )
 
-    sent_quote = bot.send_message(VOTING_ID,
-                                  f'Пользователь {author_representation} предложил следующую цитату:\n\n{quote}',
-                                  reply_markup=keyboard)
+    sent_quote = bot.send_message(
+        VOTING_ID, f'Пользователь {author_representation} предложил следующую цитату:\n\n{quote}', reply_markup=keyboard
+    )
 
     pending.update(
-        {call_count: {'text': quote, 'message_id': sent_quote.message_id, 'author': author_representation,
-                      'source': [message.chat.id, message.id], 'reputation': {'+': [], '-': []}}})
+        {
+            call_count: {
+                'text': quote,
+                'message_id': sent_quote.message_id,
+                'author': author_representation,
+                'source': [message.chat.id, message.id],
+                'reputation': {'+': [], '-': []},
+            }
+        }
+    )
 
     utils.save_json(pending, 'pending.json')
 
@@ -216,25 +232,54 @@ def quote_verdict():
         message_id = quote['message_id']
         author_id, source_id = quote['source']
         reputation = len(quote['reputation']['+']) - len(quote['reputation']['-'])
-        speakers = [speaker.removeprefix('#').lower() for speaker in quote_text.split('\n\n')[-1].split()]
+        speaker = quote_text.split('\n\n')[-1].split()[-1].removeprefix('#').lower()
 
-        for speaker in speakers:
-            sugg_stats['speaker'][speaker][1] = sugg_stats['speaker'].get(speaker, [0, 0])[1] + 1
-        sugg_stats['suggester'][author_id][1] = sugg_stats['suggester'].get(author_id, [0, 0])[1] + 1
+        sugg_stats['speaker'][speaker] = sugg_stats['speaker'].get(speaker, [0, 0])
+        sugg_stats['speaker'][speaker][1] += 1
+        sugg_stats['suggester'][author_id] = sugg_stats['suggester'].get(author_id, [0, 0])
+        sugg_stats['suggester'][author_id][1] += 1
+
+        speaker_acc, speaker_all = sugg_stats['speaker'][speaker]
+        speaker_ratio = speaker_acc / speaker_all
+
+        suggester_acc, suggester_all = sugg_stats['suggester'][author_id]
+        suggester_ratio = suggester_acc / suggester_all
 
         if len(quote['reputation']['+']) + len(quote['reputation']['-']) < MIN_VOTES:
             updated_pending.update({key: quote})
-        elif reputation < ACCEPT:
+            continue
+
+        response = session.post(
+            f'{NN_BASE_URL}/predict',
+            json={
+                'speaker_acc': speaker_acc,
+                'speaker_ratio': speaker_ratio,
+                'suggester_acc': suggester_acc,
+                'suggester_ratio': suggester_ratio,
+                'text': quote_text,
+            },
+        )
+        nn_verdict = 'принять' if int(response.text) else 'отклонить'
+        nn_verdict_fmt = f'Специально обученная нейросеть решила {nn_verdict} эту цитату '
+
+        if reputation < ACCEPT:
+            if nn_verdict == 'отклонить':
+                nn_verdict_fmt += '🎉'
+            else:
+                nn_verdict_fmt += '❗'
+
             try:
                 bot.edit_message_text(
                     f'Пользователь {quote['author']} '
-                    f'предложил следующую цитату:\n\n{quote_text}\n\nОтклонено модерацией с рейтингом {reputation}',
-                    VOTING_ID, message_id, reply_markup=None)
+                    f'предложил следующую цитату:\n\n{quote_text}\n\nОтклонено модерацией с рейтингом {reputation}\n\n{nn_verdict_fmt}',
+                    VOTING_ID,
+                    message_id,
+                    reply_markup=None,
+                )
             except telebot.apihelper.ApiTelegramException:
                 logger.exception(f'Error with editing message {message_id} in voting chat')
             try:
-                bot.send_message(author_id, 'Твоя цитата была отклонена на голосовании :(',
-                                 reply_to_message_id=source_id)
+                bot.send_message(author_id, 'Твоя цитата была отклонена на голосовании :(', reply_to_message_id=source_id)
             except telebot.apihelper.ApiTelegramException:
                 bot.send_message(author_id, 'Твоя цитата была отклонена на голосовании :(')
 
@@ -249,16 +294,23 @@ def quote_verdict():
 
             logger.info(f'{reject_quo = }, {pformat(rejected[str(max(map(int, rejected)))]) if rejected else None}')
         else:
+            if nn_verdict == 'принять':
+                nn_verdict_fmt += '🎉'
+            else:
+                nn_verdict_fmt += '❗'
+
             try:
                 bot.edit_message_text(
                     f'Пользователь {quote['author']} '
-                    f'предложил следующую цитату:\n\n{quote_text}\n\nОпубликовано модерацией с рейтингом {reputation}',
-                    VOTING_ID, message_id, reply_markup=None)
+                    f'предложил следующую цитату:\n\n{quote_text}\n\nОпубликовано модерацией с рейтингом {reputation}\n\n{nn_verdict_fmt}',
+                    VOTING_ID,
+                    message_id,
+                    reply_markup=None,
+                )
             except telebot.apihelper.ApiTelegramException:
                 logger.exception(f'Error with editing message {message_id} in voting chat')
             try:
-                bot.send_message(author_id, 'Твоя цитата отправлена в очередь на публикацию!',
-                                 reply_to_message_id=source_id)
+                bot.send_message(author_id, 'Твоя цитата отправлена в очередь на публикацию!', reply_to_message_id=source_id)
             except telebot.apihelper.ApiTelegramException:
                 bot.send_message(author_id, 'Твоя цитата отправлена в очередь на публикацию!')
 
@@ -266,9 +318,10 @@ def quote_verdict():
             queue.update({str(len(queue)): quote_text})
             utils.save_json(queue, 'queue.json')
 
-            for speaker in speakers:
-                sugg_stats['speaker'][speaker][0] = sugg_stats['speaker'].get(speaker, [0, 0])[0] + 1
-            sugg_stats['suggester'][author_id][0] = sugg_stats['suggester'].get(author_id, [0, 0])[0] + 1
+            sugg_stats['speaker'][speaker] = sugg_stats['speaker'].get(speaker, [0, 0])
+            sugg_stats['speaker'][speaker][0] += 1
+            sugg_stats['suggester'][author_id] = sugg_stats['suggester'].get(author_id, [0, 0])
+            sugg_stats['suggester'][author_id][0] += 1
 
             accept_quo += 1
 
@@ -291,19 +344,24 @@ def quote_verdict():
         voted_stat_msg += f'<code>{mod}</code>: {stat[0]} ({stat[1]})\n'
 
     bot.send_message(ADMIN_ID, voted_stat_msg, parse_mode='HTML')
-    bot.send_message(ADMIN_ID, f'Цитат в предложке до вердикта: {len(pending)}\n'
-                               f'Цитат в предложке после вердикта: {len(updated_pending)}\n'
-                               f'Принято цитат за вердикт: {accept_quo}\n'
-                               f'Отклонено цитат за вердикт: {reject_quo}')
+    bot.send_message(
+        ADMIN_ID,
+        f'Цитат в предложке до вердикта: {len(pending)}\n'
+        f'Цитат в предложке после вердикта: {len(updated_pending)}\n'
+        f'Принято цитат за вердикт: {accept_quo}\n'
+        f'Отклонено цитат за вердикт: {reject_quo}',
+    )
 
 
 @bot.message_handler(commands=['start'])
 @private_chat
 def start(message):
     waiting_for_suggest[message.from_user.id] = False
-    bot.send_message(message.chat.id,
-                     'Привет! Сюда ты можешь предлагать цитаты для публикации в канале "Забавные цитаты Летово". Если ты вдруг еще не подписан - держи ссылку: '
-                     'https://t.me/letovo_quotes. Никаких ограничений - предлагай все, что покажется тебе смешным (с помощью команды /suggest), главное, укажи автора цитаты :)')
+    bot.send_message(
+        message.chat.id,
+        'Привет! Сюда ты можешь предлагать цитаты для публикации в канале "Забавные цитаты Летово". Если ты вдруг еще не подписан - держи ссылку: '
+        'https://t.me/letovo_quotes. Никаких ограничений - предлагай все, что покажется тебе смешным (с помощью команды /suggest), главное, укажи автора цитаты :)',
+    )
     logging.info(f'{utils.user_representation(message.from_user) = }')
 
 
@@ -316,9 +374,11 @@ def suggest(message):
     if quote:
         handle_quote(message, quote)
     else:
-        bot.send_message(message.chat.id,
-                         'Эта команда используется для отправки цитат в предложку. Все, что тебе нужно сделать — отправить цитату следующим сообщением или '
-                         'через пробел после команды /suggest и ждать вердикта.')
+        bot.send_message(
+            message.chat.id,
+            'Эта команда используется для отправки цитат в предложку. Все, что тебе нужно сделать — отправить цитату следующим сообщением или '
+            'через пробел после команды /suggest и ждать вердикта.',
+        )
         waiting_for_suggest[message.from_user.id] = True
 
 
@@ -326,16 +386,22 @@ def suggest(message):
 @private_chat
 def help(message):
     waiting_for_suggest[message.from_user.id] = False
-    user_help = '<b>Пользовательские команды:</b>\n/start – запуск бота\n/help – вызов этого сообщения\n' \
-                '/suggest – предложить цитату\n/suggest_rollback – откатить последнюю предложенную цитату'
-    mod_help = '<b>Админские команды:</b>\n/ban [id]; [reason]; [duration in hours, 1 by default] – блокировка пользователя\n/unban [id]; [reason] - разблокировка пользователя\n' \
-               '/get_banlist – список заблокированных в данный момент пользователей\n/get – текущая очередь цитат на публикацию\n' \
-               '/not_voted – получить ссылки на все цитаты в предложке, за которые ты ещё не проголосовал\n'
-    admin_help = '/push [text] – добавление цитаты в очередь\n' \
-                 '/edit [id]; [text] – изменение цитаты с заданным номером\n/delete [id] – удаление цитаты с заданным номером\n' \
-                 '/swap [id1]; [id2] – поменять местами две цитаты\n/insert [id]; [text] – вставить цитату в заданное место в очереди\n' \
-                 '/verdict – вызвать определение вердиктов для всех цитат в предложке\n/predict – получить предсказание вердикта\n' \
-                 '/reload – перезагрузить файлы из облака'
+    user_help = (
+        '<b>Пользовательские команды:</b>\n/start – запуск бота\n/help – вызов этого сообщения\n'
+        '/suggest – предложить цитату\n/suggest_rollback – откатить последнюю предложенную цитату'
+    )
+    mod_help = (
+        '<b>Админские команды:</b>\n/ban [id]; [reason]; [duration in hours, 1 by default] – блокировка пользователя\n/unban [id]; [reason] - разблокировка пользователя\n'
+        '/get_banlist – список заблокированных в данный момент пользователей\n/get – текущая очередь цитат на публикацию\n'
+        '/not_voted – получить ссылки на все цитаты в предложке, за которые ты ещё не проголосовал\n'
+    )
+    admin_help = (
+        '/push [text] – добавление цитаты в очередь\n'
+        '/edit [id]; [text] – изменение цитаты с заданным номером\n/delete [id] – удаление цитаты с заданным номером\n'
+        '/swap [id1]; [id2] – поменять местами две цитаты\n/insert [id]; [text] – вставить цитату в заданное место в очереди\n'
+        '/verdict – вызвать определение вердиктов для всех цитат в предложке\n/predict – получить предсказание вердикта\n'
+        '/reload – перезагрузить файлы из облака'
+    )
 
     bot.send_message(message.chat.id, user_help, parse_mode='HTML')
 
@@ -363,7 +429,10 @@ def suggest_rollback(message):
                 bot.edit_message_text(
                     f'Пользователь {sent_quote['author']} '
                     f'предложил следующую цитату:\n\n{quote_text}\n\nПредложенная цитата была отклонена автором.',
-                    VOTING_ID, quote_id, reply_markup=None)
+                    VOTING_ID,
+                    quote_id,
+                    reply_markup=None,
+                )
             except telebot.apihelper.ApiTelegramException:
                 logger.exception(f'Error with editing rolled back quote {quote_id}')
             bot.send_message(message.chat.id, 'Успешно отозвал твою последнюю предложенную цитату!')
@@ -479,15 +548,16 @@ def ban(message, args):
 
     period *= 3600
 
-    banned_log = bot.send_message(ADMIN_ID,
-                                  f'Модератор @{message.from_user.username} заблокировал пользователя {user_id} на {utils.format_time(period)} по причине "{reason}"')
+    banned_log = bot.send_message(
+        ADMIN_ID,
+        f'Модератор @{message.from_user.username} заблокировал пользователя {user_id} на {utils.format_time(period)} по причине "{reason}"',
+    )
     bot.pin_chat_message(ADMIN_ID, banned_log.message_id)
 
     banlist.update({user_id: int(time.time()) + period})
     utils.save_json(banlist, 'banlist.json')
 
-    bot.send_message(user_id,
-                     f'Ты был заблокирован по причине {reason}. Оставшееся время блокировки: {utils.format_time(period)}')
+    bot.send_message(user_id, f'Ты был заблокирован по причине {reason}. Оставшееся время блокировки: {utils.format_time(period)}')
     bot.send_message(message.chat.id, f'Пользователь {user_id} успешно заблокирован!')
 
 
@@ -512,8 +582,9 @@ def unban(message, args):
     banlist.pop(user_id)
 
     bot.send_message(message.chat.id, f'Пользователь {user_id} успешно разблокирован!')
-    banned_log = bot.send_message(ADMIN_ID,
-                                  f'Модератор @{message.from_user.username} разблокировал пользователя {user_id} по причине "{reason}"')
+    banned_log = bot.send_message(
+        ADMIN_ID, f'Модератор @{message.from_user.username} разблокировал пользователя {user_id} по причине "{reason}"'
+    )
     bot.pin_chat_message(ADMIN_ID, banned_log.message_id)
 
     utils.save_json(banlist, 'banlist.json')
@@ -626,8 +697,7 @@ def edit(message, args):
                 pending[key]['text'] = quote
                 break
 
-        bot.edit_message_text(source.text.splitlines()[0] + '\n\n' + quote, VOTING_ID,
-                              source.message_id, reply_markup=source.reply_markup)
+        bot.edit_message_text(source.text.splitlines()[0] + '\n\n' + quote, VOTING_ID, source.message_id, reply_markup=source.reply_markup)
         bot.delete_message(VOTING_ID, message.message_id)
 
         utils.save_json(pending, 'pending.json')
@@ -700,8 +770,10 @@ def text_handler(message):
 
     if message.chat.id == DISCUSSION_ID and re.search(r'(@|t.me/)[a-zA-Z0-9_]{5,32}$', message.text.strip()) is not None:
         bot.delete_message(DISCUSSION_ID, message.message_id)
-        bot.send_message(ADMIN_ID,
-                         f'Пользователь @{message.from_user.username} отправил в чат обсуждения сообщение с пингом! Мы подозреваем, что это спам =(')
+        bot.send_message(
+            ADMIN_ID,
+            f'Пользователь @{message.from_user.username} отправил в чат обсуждения сообщение с пингом! Мы подозреваем, что это спам =(',
+        )
 
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -715,7 +787,7 @@ def button_handler(call):
         return
 
     lower_bound = datetime.strptime(VERDICT_TIME, '%H:%M')
-    upper_bound = lower_bound + timedelta(seconds=20)
+    upper_bound = lower_bound + timedelta(seconds=40)
 
     if lower_bound.time() <= datetime.now().time() <= upper_bound.time():
         bot.answer_callback_query(call.id, 'Сейчас не время голосовать!')
@@ -750,8 +822,7 @@ def button_handler(call):
 
         if moderator_id in reputation[opposite_vote[0]]:
             pending[quote_id]['reputation'][opposite_vote[0]].remove(call.from_user.id)
-            bot.answer_callback_query(call.id,
-                                      f'Успешно поменял твой голос с "{opposite_vote[1]}" на "{current_vote[1]}"!')
+            bot.answer_callback_query(call.id, f'Успешно поменял твой голос с "{opposite_vote[1]}" на "{current_vote[1]}"!')
 
         bot.answer_callback_query(call.id, f'Спасибо за голос "{current_vote[1]}"!')
 
@@ -759,9 +830,15 @@ def button_handler(call):
 
     elif action[0] == 'suggest_reject' and call.from_user.id in ADMIN_LIST:
         keyboard = generate_keyboard(
-            {'🤬 Цензура': f'reject: {quote_id}: censorship', '🤷 Что-то пошло не так': f'reject: {quote_id}: fail',
-             '📜 Дубликат': f'reject: {quote_id}: duplicate', '💬 Флуд': f'reject: {quote_id}: flood',
-             '👤 Отсутствие автора': f'reject: {quote_id}: unknown_author', '🚫 Отмена': f'reject: {quote_id}: cancel'})
+            {
+                '🤬 Цензура': f'reject: {quote_id}: censorship',
+                '🤷 Что-то пошло не так': f'reject: {quote_id}: fail',
+                '📜 Дубликат': f'reject: {quote_id}: duplicate',
+                '💬 Флуд': f'reject: {quote_id}: flood',
+                '👤 Отсутствие автора': f'reject: {quote_id}: unknown_author',
+                '🚫 Отмена': f'reject: {quote_id}: cancel',
+            }
+        )
 
         bot.edit_message_text(call.message.text, VOTING_ID, call.message.id, reply_markup=keyboard)
 
@@ -779,8 +856,13 @@ def button_handler(call):
             case 'unknown_author':
                 reason = 'того, что автор цитаты неизвестен :('
             case 'cancel':
-                keyboard = generate_keyboard({'➕ За': f'upvote: {quote_id}', '➖ Против': f'downvote: {quote_id}',
-                                              '🚫 Отклонить (только администраторы)': f'suggest_reject: {quote_id}'})
+                keyboard = generate_keyboard(
+                    {
+                        '➕ За': f'upvote: {quote_id}',
+                        '➖ Против': f'downvote: {quote_id}',
+                        '🚫 Отклонить (только администраторы)': f'suggest_reject: {quote_id}',
+                    }
+                )
 
                 bot.edit_message_text(call.message.text, VOTING_ID, call.message.id, reply_markup=keyboard)
                 return
@@ -791,13 +873,15 @@ def button_handler(call):
 
         try:
             bot.edit_message_text(
-                f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username} по причине {reason}', VOTING_ID,
-                call.message.id, reply_markup=None)
+                f'{call.message.text}\n\nОтклонено модератором @{call.from_user.username} по причине {reason}',
+                VOTING_ID,
+                call.message.id,
+                reply_markup=None,
+            )
         except telebot.apihelper.ApiTelegramException:
             logger.exception(f'Error with editing message {call.message.id} by admin command')
         try:
-            bot.send_message(author_id, f'Твоя цитата была отклонена по причине {reason}',
-                             reply_to_message_id=source_id)
+            bot.send_message(author_id, f'Твоя цитата была отклонена по причине {reason}', reply_to_message_id=source_id)
         except telebot.apihelper.ApiTelegramException:
             bot.send_message(author_id, f'Твоя цитата была отклонена по причине {reason}')
 
@@ -811,11 +895,12 @@ def button_handler(call):
         sugg_stats = utils.open_json('sugg_stats.json')
         quote_text = quote['text']
 
-        speakers = [speaker.removeprefix('#').lower() for speaker in quote_text.split('\n\n')[-1].split()]
+        speaker = quote_text.split('\n\n')[-1].split()[-1].removeprefix('#').lower()
 
-        for speaker in speakers:
-            sugg_stats['speaker'][speaker][1] = sugg_stats['speaker'].get(speaker, [0, 0])[1] + 1
-        sugg_stats['suggester'][author_id][1] = sugg_stats['suggester'].get(author_id, [0, 0])[1] + 1
+        sugg_stats['speaker'][speaker] = sugg_stats['speaker'].get(speaker, [0, 0])
+        sugg_stats['speaker'][speaker][1] += 1
+        sugg_stats['suggester'][author_id] = sugg_stats['suggester'].get(author_id, [0, 0])
+        sugg_stats['suggester'][author_id][1] += 1
 
         utils.save_json(sugg_stats, 'sugg_stats.json')
 
@@ -830,11 +915,9 @@ if __name__ == '__main__':
     if SERVER:
         server = Flask(__name__)
 
-
         @server.route('/')
         def ping():
             return 'Go to <a href="/launch">/launch</a> to set webhook', 200
-
 
         @server.route('/updates', methods=['POST'])
         def get_messages():
@@ -843,14 +926,12 @@ if __name__ == '__main__':
             bot.process_new_updates([telebot.types.Update.de_json(raw_update)])
             return '!', 200
 
-
         @server.route('/launch')
         def webhook():
             bot.remove_webhook()
             time.sleep(0.1)
             bot.set_webhook(url=WEBHOOK_URL, max_connections=1)
             return 'Webhook set!', 200
-
 
         webhook()
         Thread(target=server.run, args=(SERVER_IP, SERVER_PORT)).start()
