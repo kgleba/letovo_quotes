@@ -18,7 +18,7 @@ from flask import Flask, request
 
 import utils
 from config import *
-from data_sessions import sessioned_data, SessionManager
+from data_sessions import SessionManager, sessioned_data
 
 manager = SessionManager()
 
@@ -211,7 +211,6 @@ def not_voted_stat(target: int) -> (int, str):
 @sessioned_data(manager, 'pending.json')
 @sessioned_data(manager, 'rejected.json')
 @sessioned_data(manager, 'queue.json')
-@sessioned_data(manager, 'sugg_stats.json')
 def quote_verdict():
     pending = utils.open_json('pending.json')
     sugg_stats = utils.open_json('sugg_stats.json')
@@ -779,7 +778,6 @@ def text_handler(message):
 @bot.callback_query_handler(func=lambda call: True)
 @sessioned_data(manager, 'pending.json')
 @sessioned_data(manager, 'rejected.json')
-@sessioned_data(manager, 'sugg_stats.json')
 def button_handler(call):
     action = call.data.split(': ')
 
