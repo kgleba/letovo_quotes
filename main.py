@@ -18,11 +18,8 @@ from flask import Flask, request
 
 import utils
 from config import *
-from data_sessions import SessionManager, sessioned_data
 
-manager = SessionManager()
-
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 waiting_for_suggest = {}
 
 logger = logging.getLogger('letovo_quotes')
@@ -86,7 +83,6 @@ def arg_parse(func):
     return wrapper
 
 
-@sessioned_data(manager, 'queue.json')
 def check_publish(publish_date: str):
     queue = utils.open_json('queue.json')
 
@@ -119,8 +115,6 @@ def generate_keyboard(content: dict[str, str]):
     return keyboard
 
 
-@sessioned_data(manager, 'banlist.json')
-@sessioned_data(manager, 'pending.json')
 def handle_quote(message, quote):
     author = message.from_user
     author_representation = utils.user_representation(author)
@@ -208,9 +202,6 @@ def not_voted_stat(target: int) -> (int, str):
     return quotes_count - 1, result.strip()
 
 
-@sessioned_data(manager, 'pending.json')
-@sessioned_data(manager, 'rejected.json')
-@sessioned_data(manager, 'queue.json')
 def quote_verdict():
     pending = utils.open_json('pending.json')
     sugg_stats = utils.open_json('sugg_stats.json')
@@ -411,7 +402,6 @@ def help(message):
 
 
 @bot.message_handler(commands=['suggest_rollback'])
-@sessioned_data(manager, 'pending.json')
 @private_chat
 def suggest_rollback(message):
     waiting_for_suggest[message.from_user.id] = False
@@ -457,7 +447,6 @@ def reload(_):
 @bot.message_handler(commands=['predict'])
 @admin_feature
 @private_chat
-@sessioned_data(manager, 'pending.json')
 def predict(_):
     pending = utils.open_json('pending.json')
     prediction_msg = '<b>Предсказание вердикта</b>\nN. Цитата (кол-во голосов / общее число голосов) — ВЕРДИКТ (репутация)\n\n'
@@ -517,7 +506,6 @@ def not_voted(message, args):
 
 
 @bot.message_handler(commands=['ban'])
-@sessioned_data(manager, 'banlist.json')
 @arg_parse
 @mod_feature
 @private_chat
@@ -561,7 +549,6 @@ def ban(message, args):
 
 
 @bot.message_handler(commands=['unban'])
-@sessioned_data(manager, 'banlist.json')
 @arg_parse
 @mod_feature
 @private_chat
@@ -590,7 +577,6 @@ def unban(message, args):
 
 
 @bot.message_handler(commands=['push'])
-@sessioned_data(manager, 'queue.json')
 @arg_parse
 @admin_feature
 @private_chat
@@ -610,7 +596,6 @@ def push(_, args):
 
 
 @bot.message_handler(commands=['get'])
-@sessioned_data(manager, 'queue.json')
 @mod_feature
 @private_chat
 def get(message):
@@ -625,7 +610,6 @@ def get(message):
 
 
 @bot.message_handler(commands=['get_banlist'])
-@sessioned_data(manager, 'banlist.json')
 @mod_feature
 @private_chat
 def get_banlist(message):
@@ -642,7 +626,6 @@ def get_banlist(message):
 
 
 @bot.message_handler(commands=['delete'])
-@sessioned_data(manager, 'queue.json')
 @arg_parse
 @admin_feature
 @private_chat
@@ -665,8 +648,6 @@ def delete(_, args):
 
 
 @bot.message_handler(commands=['edit'])
-@sessioned_data(manager, 'queue.json')
-@sessioned_data(manager, 'pending.json')
 @arg_parse
 def edit(message, args):
     if message.chat.id == ADMIN_ID:
@@ -705,7 +686,6 @@ def edit(message, args):
 
 
 @bot.message_handler(commands=['swap'])
-@sessioned_data(manager, 'queue.json')
 @arg_parse
 @admin_feature
 @private_chat
@@ -728,7 +708,6 @@ def swap(_, args):
 
 
 @bot.message_handler(commands=['insert'])
-@sessioned_data(manager, 'queue.json')
 @arg_parse
 @admin_feature
 @private_chat
@@ -776,8 +755,6 @@ def text_handler(message):
 
 
 @bot.callback_query_handler(func=lambda call: True)
-@sessioned_data(manager, 'pending.json')
-@sessioned_data(manager, 'rejected.json')
 def button_handler(call):
     action = call.data.split(': ')
 
@@ -785,7 +762,7 @@ def button_handler(call):
         return
 
     lower_bound = datetime.strptime(VERDICT_TIME, '%H:%M')
-    upper_bound = lower_bound + timedelta(seconds=40)
+    upper_bound = lower_bound + timedelta(seconds=20)
 
     if lower_bound.time() <= datetime.now().time() <= upper_bound.time():
         bot.answer_callback_query(call.id, 'Сейчас не время голосовать!')
