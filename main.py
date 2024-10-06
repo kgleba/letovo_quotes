@@ -152,7 +152,7 @@ def handle_quote(message, quote):
 
     for sent_quote in pending.values():
         if utils.check_similarity(sent_quote['text'], quote) > 75:
-            bot.send_message(message.chat.id, 'Подобная цитата уже отправлена в предложку! Флудить не стоит, ожидай ответа модерации :)')
+            bot.send_message(message.chat.id, 'Подобная цитата уже отправлена в предложку! Флудить не стоит :)')
             return
 
     bot.send_message(message.chat.id, 'Принято! Отправил твою цитату в предложку :)')
@@ -268,10 +268,6 @@ def quote_verdict():
                 )
             except telebot.apihelper.ApiTelegramException:
                 logger.exception(f'Error with editing message {message_id} in voting chat')
-            try:
-                bot.send_message(author_id, 'Твоя цитата была отклонена на голосовании :(', reply_to_message_id=source_id)
-            except telebot.apihelper.ApiTelegramException:
-                bot.send_message(author_id, 'Твоя цитата была отклонена на голосовании :(')
 
             rejected = utils.open_json('rejected.json')
             if rejected:
@@ -299,10 +295,6 @@ def quote_verdict():
                 )
             except telebot.apihelper.ApiTelegramException:
                 logger.exception(f'Error with editing message {message_id} in voting chat')
-            try:
-                bot.send_message(author_id, 'Твоя цитата отправлена в очередь на публикацию!', reply_to_message_id=source_id)
-            except telebot.apihelper.ApiTelegramException:
-                bot.send_message(author_id, 'Твоя цитата отправлена в очередь на публикацию!')
 
             queue = utils.open_json('queue.json')
             queue.update({str(len(queue)): quote_text})
@@ -367,7 +359,7 @@ def suggest(message):
         bot.send_message(
             message.chat.id,
             'Эта команда используется для отправки цитат в предложку. Все, что тебе нужно сделать — отправить цитату следующим сообщением или '
-            'через пробел после команды /suggest и ждать вердикта.',
+            'через пробел после команды /suggest',
         )
         waiting_for_suggest[message.from_user.id] = True
 
