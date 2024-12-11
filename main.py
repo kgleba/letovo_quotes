@@ -235,9 +235,12 @@ def quote_verdict():
         suggester_acc, suggester_all = sugg_stats['suggester'][author_id]
         suggester_ratio = suggester_acc / suggester_all
 
-        if len(quote['reputation']['+']) + len(quote['reputation']['-']) < MIN_VOTES:
-            updated_pending.update({key: quote})
-            continue
+        n_votes = len(quote['reputation']['+']) + len(quote['reputation']['-'])
+        missing_votes = len(MOD_LIST) - n_votes
+        if n_votes < MIN_VOTES:
+            if not ((reputation + missing_votes) < ACCEPT or (reputation - missing_votes) >= ACCEPT):
+                updated_pending.update({key: quote})
+                continue
 
         response = session.post(
             f'{NN_BASE_URL}/predict',
@@ -888,8 +891,11 @@ if __name__ == '__main__':
 
         @server.route('/updates', methods=['POST'])
         def get_messages():
+            if request.headers.get('X-Telegram-Bot-Api-Secret-Token') != UPDATES_TOKEN:
+                return 'Invalid update token', 403
+
             raw_update = request.stream.read().decode('utf-8')
-            logger.info(pformat(json.loads(raw_update)))
+            logger.debug(pformat(json.loads(raw_update)))
             bot.process_new_updates([telebot.types.Update.de_json(raw_update)])
             return '!', 200
 
@@ -897,7 +903,7 @@ if __name__ == '__main__':
         def webhook():
             bot.remove_webhook()
             time.sleep(0.1)
-            bot.set_webhook(url=WEBHOOK_URL, max_connections=1)
+            bot.set_webhook(url=WEBHOOK_URL, max_connections=1, secret_token=UPDATES_TOKEN)
             return 'Webhook set!', 200
 
         webhook()
