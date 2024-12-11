@@ -889,7 +889,7 @@ if __name__ == '__main__':
         @server.route('/updates', methods=['POST'])
         def get_messages():
             raw_update = request.stream.read().decode('utf-8')
-            logger.debug(pformat(json.loads(raw_update)))
+            logger.info(pformat(json.loads(raw_update)))
             bot.process_new_updates([telebot.types.Update.de_json(raw_update)])
             return '!', 200
 
