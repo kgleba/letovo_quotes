@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timedelta
 from functools import wraps
 from operator import itemgetter
+from pathlib import Path
 from pprint import pformat
 from threading import Thread
 
@@ -14,7 +15,7 @@ import requests
 import schedule
 import telebot
 import yaml
-from flask import Flask, request
+from flask import Flask, abort, request, send_from_directory
 
 import utils
 from config import *
@@ -891,11 +892,12 @@ if __name__ == '__main__':
 
         @server.route('/updates', methods=['POST'])
         def get_messages():
-            if request.headers.get('X-Telegram-Bot-Api-Secret-Token') != UPDATES_TOKEN:
-                return 'Invalid update token', 403
-
             raw_update = request.stream.read().decode('utf-8')
             logger.debug(pformat(json.loads(raw_update)))
+
+            if request.headers.get('X-Telegram-Bot-Api-Secret-Token') != ACCESS_TOKEN:
+                return 'Invalid update token', 403
+
             bot.process_new_updates([telebot.types.Update.de_json(raw_update)])
             return '!', 200
 
@@ -903,8 +905,20 @@ if __name__ == '__main__':
         def webhook():
             bot.remove_webhook()
             time.sleep(0.1)
-            bot.set_webhook(url=WEBHOOK_URL, max_connections=1, secret_token=UPDATES_TOKEN)
+            bot.set_webhook(url=WEBHOOK_URL, max_connections=1, secret_token=ACCESS_TOKEN)
             return 'Webhook set!', 200
+
+
+        @server.route('/runtime_logs', defaults={'filename': None}, methods=['GET'])
+        @server.route('/runtime_logs/<path:filename>', methods=['GET'])
+        def runtime_logs(filename: str):
+            if request.headers.get('Authorization') != f'Bearer {ACCESS_TOKEN}':
+                abort(403)
+
+            if filename is None:
+                return list(Path('logs').glob('*'))
+
+            return send_from_directory('logs', filename)
 
         webhook()
         Thread(target=server.run, args=(SERVER_IP, SERVER_PORT)).start()

@@ -13,7 +13,8 @@ VOTING_ID: int = -1111111111111  # ID of the group with moderators
 DISCUSSION_ID: int = -1111111111111  # ID of the channel's discussion
 
 BOT_TOKEN: str = os.getenv('BOT_TOKEN')  # token received from the BotFather
-UPDATES_TOKEN: str = os.getenv('UPDATES_TOKEN')  # token that ensures legitimacy of updates from webhook
+# token for access to internal endpoints, such as updates from webhook or runtime logs
+ACCESS_TOKEN: str = os.getenv('ACCESS_TOKEN')
 
 BAN_TIME: int = 1  # default ban time, in hours
 ACCEPT: int = 3  # rating required for the quote to be accepted
