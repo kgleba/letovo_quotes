@@ -2,12 +2,12 @@ import atexit
 import json
 import logging
 import logging.config
+import os
 import re
 import time
 from datetime import datetime, timedelta
 from functools import wraps
 from operator import itemgetter
-from pathlib import Path
 from pprint import pformat
 from threading import Thread
 
@@ -916,7 +916,7 @@ if __name__ == '__main__':
                 abort(403)
 
             if filename is None:
-                return list(Path('logs').glob('*'))
+                return os.listdir('logs')
 
             return send_from_directory('logs', filename)
 
