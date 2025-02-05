@@ -668,6 +668,10 @@ def edit(message, args):
         quote = args[0]
         source = message.reply_to_message
 
+        if source is None:
+            bot.delete_message(VOTING_ID, message.message_id)
+            return
+
         for key, value in pending.items():
             if source.message_id == value['message_id']:
                 pending[key]['text'] = quote
